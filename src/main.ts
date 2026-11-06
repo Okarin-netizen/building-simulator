@@ -1,8 +1,8 @@
 // 画面の操作：ステージを選ぶ、部材を置く・消す、地震で試験する、結果を見る。
 
-import { addMember, designCost, designHeight, emptyDesign, frameDesign, removeMember, type Design } from './physics/design';
+import { addMember, designCost, designHeight, emptyDesign, frameDesign, ISOLATION_COST_PER_BASE, removeMember, type Design } from './physics/design';
 import { MATERIALS, MATERIAL_IDS, type MaterialId } from './physics/materials';
-import { groundOffset, makeQuake, QUAKE_LEVELS, QUAKE_TYPES, type QuakeLevel, type QuakeType } from './physics/quake';
+import { groundOffset, makeQuake, QUAKE_LEVELS, QUAKE_TYPES, TEST_DURATION, type QuakeLevel, type QuakeType } from './physics/quake';
 import { createWorld, SETTLE_TIME, step, type World } from './physics/world';
 import { distanceToSegment } from './physics/geometry';
 import { canStartTest, evaluate } from './game/evaluate';
@@ -12,23 +12,24 @@ import { buildSubmitUrl, classLinkFor, parseFormTemplate, readClassLink, validat
 import {
   clearAttempts,
   clearClassForm,
-  loadClassForm,
-  saveClassForm,
   loadAttempts,
+  loadClassForm,
   loadDesign,
+  loadLastStage,
   loadNotes,
   loadProgress,
   logAttempt,
   recordResult,
+  saveClassForm,
   saveDesign,
+  saveLastStage,
   saveNotes,
 } from './game/progress';
 import { APP_LICENSE, AUTHOR, CHANGELOG, MIT_TEXT, THIRD_PARTY } from './game/about';
-import { CHAPTER_NAMES, nextStage, stageById, stageLabel, STAGES, type Stage } from './game/stages';
+import { CHAPTER_NAMES, nextStage, stageById, stageFullTitle, stageLabel, STAGES, type Stage } from './game/stages';
 import { drawDesign, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, type Viewport } from './render';
 
 const FREE_ID = 'free';
-const LAST_STAGE_KEY = 'saikou-tower-last-stage-v1';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('canvas');
@@ -79,6 +80,13 @@ const allowedMaterials = () => stage?.materials ?? MATERIAL_IDS;
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const starText = (n: number) => '★'.repeat(n) + `<span class="off">${'★'.repeat(3 - n)}</span>`;
 
+/** 画面をおおう窓（ダイアログ）の外側をタップしたら閉じる */
+function closeOnBackdrop(dialog: HTMLElement): void {
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog) dialog.hidden = true;
+  });
+}
+
 // ---------- ステージの切り替え ----------
 
 function openStage(s: Stage | null): void {
@@ -86,11 +94,7 @@ function openStage(s: Stage | null): void {
   stage = s;
   design = loadDesign(designId()) ?? (s ? s.initial() : frameDesign({ floors: 3 }));
   if (!allowedMaterials().includes(material)) material = allowedMaterials()[0];
-  try {
-    localStorage.setItem(LAST_STAGE_KEY, designId());
-  } catch {
-    // 何もしない
-  }
+  saveLastStage(designId());
   menu.hidden = true;
 
   $('stage-no').textContent = s ? stageLabel(s) : '実験';
@@ -155,9 +159,7 @@ function openMenu(): void {
 
 $('open-menu').addEventListener('click', openMenu);
 $('free-mode').addEventListener('click', () => openStage(null));
-menu.addEventListener('click', (e) => {
-  if (e.target === menu) menu.hidden = true;
-});
+closeOnBackdrop(menu);
 
 // ---------- パネル ----------
 
@@ -211,7 +213,7 @@ $('toggle-iso').addEventListener('click', () => {
   persist();
   refreshPanel();
   hint.textContent = design.isolated
-    ? '建物の下に免震ゴムを入れました（基礎1か所につき10万円）。'
+    ? `建物の下に免震ゴムを入れました（基礎1か所につき${ISOLATION_COST_PER_BASE}万円）。`
     : '免震ゴムを外しました。';
 });
 startBtn.addEventListener('click', startPredict);
@@ -297,7 +299,7 @@ function startQuake(): void {
   const quake = stage
     ? makeQuake(stage.quake.level, stage.quake.type)
     : makeQuake(levelSelect.value as QuakeLevel, typeSelect.value as QuakeType);
-  const wind = stage?.wind ? { speed: stage.wind, duration: 15 } : null;
+  const wind = stage?.wind ? { speed: stage.wind, duration: TEST_DURATION } : null;
   world = createWorld(design, wind ? null : quake, wind);
   frames = [captureFrame(world, 0)];
   simLag = 0;
@@ -336,15 +338,16 @@ function showResult(w: World): void {
   const ev = evaluate(stage, design, w);
   const judge = judgePrediction(design, prediction ?? { kind: 'none' }, w.firstBreak);
   const isChallenge = stage?.chapter === 'challenge';
+  const cost = designCost(design);
   if (stage) recordResult(stage.id, ev.stars, isChallenge && ev.cleared ? ev.height : undefined);
   logAttempt({
     at: new Date().toISOString(),
     stageId: designId(),
-    stageTitle: stage ? `${stageLabel(stage)} ${stage.title}` : '自由に作る',
+    stageTitle: stage ? stageFullTitle(stage) : '自由に作る',
     cleared: ev.cleared,
     stars: stage ? ev.stars : 0,
     height: ev.height,
-    cost: designCost(design),
+    cost,
     predicted: judge.predicted,
     actual: judge.actual,
     verdict: judge.verdict,
@@ -352,11 +355,11 @@ function showResult(w: World): void {
 
   lastResult = stage
     ? {
-        stage: `${stageLabel(stage)} ${stage.title}`,
+        stage: stageFullTitle(stage),
         // ランキングを高さで並べたとき、倒れた建物が上に来ないよう、クリアしなかったら 0m にする
         height: ev.cleared ? ev.height : 0,
         stars: ev.stars,
-        cost: designCost(design),
+        cost,
         result: ev.cleared ? 'クリア' : w.collapsed ? '倒れた' : '高さが足りない',
       }
     : null;
@@ -535,9 +538,7 @@ $('sheet-clear').addEventListener('click', () => {
   saveNotes(nickname ? { nickname } : {});
   openSheet();
 });
-sheet.addEventListener('click', (e) => {
-  if (e.target === sheet) sheet.hidden = true;
-});
+closeOnBackdrop(sheet);
 
 // ---------- クラスランキング（先生の Google フォーム） ----------
 
@@ -545,6 +546,8 @@ const classDialog = $<HTMLDivElement>('class-dialog');
 const sendDialog = $<HTMLDivElement>('send-dialog');
 const classInput = $<HTMLTextAreaElement>('class-input');
 const classMsg = $<HTMLParagraphElement>('class-msg');
+const sendName = $<HTMLInputElement>('send-name');
+const sendGroup = $<HTMLInputElement>('send-group');
 
 const classForm = (): FormTemplate | null => validateTemplate(loadClassForm());
 
@@ -587,16 +590,17 @@ classInput.addEventListener('input', () => {
   refreshClassStatus();
 });
 
-$('class-copy').addEventListener('click', async () => {
+const classCopy = $<HTMLButtonElement>('class-copy');
+classCopy.addEventListener('click', async () => {
   const box = $<HTMLTextAreaElement>('class-link');
   try {
     await navigator.clipboard.writeText(box.value);
-    $('class-copy').textContent = 'コピーしました';
+    classCopy.textContent = 'コピーしました';
   } catch {
     box.select();
-    $('class-copy').textContent = '選んだ所をコピーしてください';
+    classCopy.textContent = '選んだ所をコピーしてください';
   }
-  setTimeout(() => ($('class-copy').textContent = 'リンクをコピー'), 2000);
+  setTimeout(() => (classCopy.textContent = 'リンクをコピー'), 2000);
 });
 $('class-test').addEventListener('click', () => {
   const t = classForm();
@@ -619,19 +623,19 @@ $('open-class').addEventListener('click', openClassDialog);
 function openSend(): void {
   if (!lastResult) return;
   const notes = loadNotes();
-  $<HTMLInputElement>('send-name').value = notes.nickname ?? '';
-  $<HTMLInputElement>('send-group').value = notes.group ?? '';
+  sendName.value = notes.nickname ?? '';
+  sendGroup.value = notes.group ?? '';
   $('send-summary').textContent = `${lastResult.stage}　高さ ${lastResult.height} m・星 ${lastResult.stars}・費用 ${lastResult.cost} 万円（${lastResult.result}）${lastResult.height === 0 ? '　※クリアしないと高さの記録は 0 m です' : ''}`;
   $('send-fallback').hidden = true;
   sendDialog.hidden = false;
-  $<HTMLInputElement>('send-name').focus();
+  sendName.focus();
 }
 
 $('send-cancel').addEventListener('click', () => (sendDialog.hidden = true));
 $('send-go').addEventListener('click', () => {
   const t = classForm();
-  const name = $<HTMLInputElement>('send-name').value.trim();
-  const group = $<HTMLInputElement>('send-group').value.trim();
+  const name = sendName.value.trim();
+  const group = sendGroup.value.trim();
   if (!t || !lastResult) return;
   if (!name) {
     $('send-summary').textContent = 'ニックネームを入れてください。';
@@ -658,10 +662,8 @@ $('send-go').addEventListener('click', () => {
   sendDialog.hidden = true;
   hint.textContent = '開いたフォームで「送信」を押してください。';
 });
-for (const d of [classDialog, sendDialog])
-  d.addEventListener('click', (e) => {
-    if (e.target === d) d.hidden = true;
-  });
+closeOnBackdrop(classDialog);
+closeOnBackdrop(sendDialog);
 
 // ---------- このアプリについて（作者・更新履歴・ライセンス） ----------
 
@@ -707,9 +709,7 @@ buildAbout();
 
 $('open-about').addEventListener('click', () => (aboutDialog.hidden = false));
 $('about-close').addEventListener('click', () => (aboutDialog.hidden = true));
-aboutDialog.addEventListener('click', (e) => {
-  if (e.target === aboutDialog) aboutDialog.hidden = true;
-});
+closeOnBackdrop(aboutDialog);
 
 /**
  * 新しいタブでフォームを開く。ポップアップがブロックされて開けなかったら false。
@@ -922,12 +922,7 @@ function currentShift(w: World): number {
 resize();
 loadClassLinkFromUrl();
 refreshClassStatus();
-let lastId: string | null = null;
-try {
-  lastId = localStorage.getItem(LAST_STAGE_KEY);
-} catch {
-  // 何もしない
-}
+const lastId = loadLastStage();
 if (lastId === FREE_ID) openStage(null);
 else openStage(stageById(lastId ?? '') ?? STAGES[0]);
 if (!lastId) openMenu();

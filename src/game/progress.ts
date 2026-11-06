@@ -6,6 +6,7 @@ import { MATERIALS } from '../physics/materials';
 import type { Verdict } from './predict';
 
 const PROGRESS_KEY = 'saikou-tower-progress-v1';
+const LAST_STAGE_KEY = 'saikou-tower-last-stage-v1';
 const DESIGN_KEY = (id: string) => `saikou-tower-design-${id}-v1`;
 
 export interface StageRecord {
@@ -64,6 +65,23 @@ export function isValidDesign(d: unknown): d is Design {
   if (!members.every((m) => m && okIndex(m.a) && okIndex(m.b) && m.a !== m.b && typeof m.material === 'string' && Object.prototype.hasOwnProperty.call(MATERIALS, m.material))) return false;
   if (loads !== undefined && !(Array.isArray(loads) && loads.every((l) => l && isNum(l.y) && isNum(l.mass)))) return false;
   return true;
+}
+
+/** 最後に開いたステージの id（自由に作るモードは 'free'）。まだ開いたことがなければ null */
+export function loadLastStage(): string | null {
+  try {
+    return localStorage.getItem(LAST_STAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveLastStage(id: string): void {
+  try {
+    localStorage.setItem(LAST_STAGE_KEY, id);
+  } catch {
+    // 保存できなくても遊べるようにする
+  }
 }
 
 export function loadDesign(id: string): Design | null {
