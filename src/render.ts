@@ -5,7 +5,7 @@ import type { Design } from './physics/design';
 import { memberStressRatio, type FirstBreak, type World } from './physics/world';
 
 /** 画面に映す範囲（メートル） */
-export const VIEW = { minX: -6, maxX: 16, maxY: 24 };
+export const VIEW = { minX: -6, maxX: 16, maxY: 30 };
 export const MAX_MEMBER_LENGTH = 6;
 
 export interface Viewport {
