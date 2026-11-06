@@ -80,6 +80,8 @@ export function removeMember(design: Design, index: number): void {
     m.a = remap.get(m.a)!;
     m.b = remap.get(m.b)!;
   }
+  // 床（その高さのつなぎ目）がなくなった重いものは、いっしょに外す
+  if (design.loads) design.loads = design.loads.filter((l) => nodes.some((n) => n.y === l.y && n.y > 0));
 }
 
 export function memberLength(design: Design, m: DesignMember): number {
