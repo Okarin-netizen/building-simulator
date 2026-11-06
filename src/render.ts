@@ -177,6 +177,32 @@ function drawBreakRing(ctx: CanvasRenderingContext2D, sx: number, sy: number, pu
 
 export const PREDICT_COLOR = '#e8452c';
 
+/** 重いもの（機械など）を、床の上に箱で描く */
+function drawLoad(ctx: CanvasRenderingContext2D, v: Viewport, points: { x: number; y: number }[], label: string): void {
+  if (points.length === 0) return;
+  const cx = points.reduce((s, p) => s + p.x, 0) / points.length;
+  const cy = points.reduce((s, p) => s + p.y, 0) / points.length;
+  const base = toScreen(v, cx, cy);
+  const w = Math.max(56, 2.2 * v.scale);
+  const h = Math.max(26, 1.1 * v.scale);
+  ctx.save();
+  ctx.fillStyle = '#3c4450';
+  ctx.strokeStyle = '#1f1f1f';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(base.sx - w / 2, base.sy - h - 4, w, h, 4);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#f6c343';
+  ctx.font = 'bold 13px system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, base.sx, base.sy - h / 2 - 4);
+  ctx.restore();
+}
+
+const loadLabel = (l: { mass: number; name?: string }) => `${l.name ?? 'おもり'} ${l.mass}`;
+
 function memberWidth(v: Viewport): number {
   return Math.max(4, v.scale * 0.22);
 }
@@ -233,6 +259,8 @@ export function drawDesign(
     ctx.globalAlpha = 1;
     drawNodeDot(ctx, b.sx, b.sy, '#ffffff', '#3c4450');
   }
+
+  for (const l of design.loads ?? []) drawLoad(ctx, v, design.nodes.filter((n) => n.y === l.y && n.y > 0), loadLabel(l));
 
   if (pinMember !== null && design.members[pinMember]) {
     const m = design.members[pinMember];
@@ -314,6 +342,8 @@ export function drawWorld(
       drawNodeDot(ctx, p.sx, p.sy, stressColor(info.ratio), '#3c4450', 5 + 2 * Math.min(1, info.ratio));
     }
   });
+
+  for (const l of world.loads) drawLoad(ctx, v, world.nodes.filter((n) => n.baseY === l.y && !n.support), loadLabel(l));
 
   const fb = marks.firstBreak;
   if (fb && world.time >= fb.time) {

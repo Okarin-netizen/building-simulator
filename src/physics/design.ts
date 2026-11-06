@@ -14,9 +14,19 @@ export interface DesignMember {
   material: MaterialId;
 }
 
+/** 機械や水タンクなどの重いもの。高さ y の床に置き、その高さのつなぎ目に重さを等しく分ける */
+export interface DesignLoad {
+  y: number;
+  mass: number;
+  /** 画面に出す名前（例：機械） */
+  name?: string;
+}
+
 export interface Design {
   nodes: DesignNode[];
   members: DesignMember[];
+  /** 重いもの（ない設計図もある） */
+  loads?: DesignLoad[];
 }
 
 export function emptyDesign(): Design {

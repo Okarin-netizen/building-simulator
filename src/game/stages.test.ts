@@ -4,7 +4,7 @@ import { designCost, frameDesign, type Design } from '../physics/design';
 import { makeQuake } from '../physics/quake';
 import { createWorld, step } from '../physics/world';
 import { canStartTest, evaluate } from './evaluate';
-import { bracedTower, stageById, STAGES, type Stage } from './stages';
+import { bracedTower, stageById, STAGES, wideTower, type Stage } from './stages';
 import { VIEW } from '../render';
 
 function play(stage: Stage, design: Design) {
@@ -82,4 +82,40 @@ test('最高タワーチャレンジ：材料を使い分ければ8階建てま�
 
 test('どのステージの目標の高さも、画面の中で建てられる', () => {
   for (const s of STAGES) expect(s.goalHeight).toBeLessThan(VIEW.maxY);
+});
+
+const withLoad = (d: Design, y: number, mass = 50): Design => ({ ...d, loads: [{ y, mass }] });
+
+test('3-1：重い機械を高い階に置くと倒れ、いちばん下の階なら耐える', () => {
+  const s = stage('3-1');
+  const mass = s.load!.mass;
+  expect(canStartTest(s, s.initial()).ok).toBe(false); // 機械を置かないと試験できない
+  expect(play(s, withLoad(s.initial(), 3, mass)).cleared).toBe(true);
+  for (const y of [6, 9, 12]) expect({ y, cleared: play(s, withLoad(s.initial(), y, mass)).cleared }).toEqual({ y, cleared: false });
+});
+
+test('3-2：幅4mの7階建ては倒れ、幅8mに広げれば予算内で耐える', () => {
+  const s = stage('3-2');
+  expect(play(s, bracedTower(Array(7).fill(W))).cleared).toBe(false);
+  const wide = wideTower(7, 2);
+  expect(designCost(wide)).toBeLessThanOrEqual(s.budget);
+  expect(play(s, wide).cleared).toBe(true);
+});
+
+test('4-1：小刻みな揺れでは3階建てが共振して倒れ、1階を鉄骨にすると耐える。ふつうの揺れなら元のままでも耐える', () => {
+  const s = stage('4-1');
+  expect(play(s, s.initial()).cleared).toBe(false);
+  expect(play(s, bracedTower([S, W, W])).cleared).toBe(true);
+  const mixed = { ...s, quake: { level: 'strong' as const, type: 'mixed' as const } };
+  expect(play(mixed, s.initial()).cleared).toBe(true);
+});
+
+test('4-2：ゆったりした揺れでは、下2階だけ鉄骨の7階建ては倒れ、下3階を鉄骨にすると予算内で耐える', () => {
+  const s = stage('4-2');
+  expect(play(s, bracedTower([S, S, W, W, W, W, W])).cleared).toBe(false);
+  const solved = bracedTower([S, S, S, W, W, W, W]);
+  expect(designCost(solved)).toBeLessThanOrEqual(s.budget);
+  expect(play(s, solved).cleared).toBe(true);
+  // ふつうの揺れなら、下2階だけ鉄骨でも耐える（揺れ方で結果が変わる）
+  expect(play(stage('challenge'), bracedTower([S, S, W, W, W, W, W])).cleared).toBe(true);
 });

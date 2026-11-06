@@ -23,7 +23,7 @@ import {
   saveNotes,
 } from './game/progress';
 import { APP_LICENSE, AUTHOR, CHANGELOG, MIT_TEXT, THIRD_PARTY } from './game/about';
-import { CHAPTER_NAMES, nextStage, stageById, STAGES, type Stage } from './game/stages';
+import { CHAPTER_NAMES, nextStage, stageById, stageLabel, STAGES, type Stage } from './game/stages';
 import { drawDesign, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toWorld, VIEW, type Viewport } from './render';
 
 const FREE_ID = 'free';
@@ -53,7 +53,7 @@ const sheet = $<HTMLDivElement>('sheet');
 let stage: Stage | null = null;
 let design: Design = emptyDesign();
 let material: MaterialId = 'wood';
-let tool: 'place' | 'erase' = 'place';
+let tool: 'place' | 'erase' | 'load' = 'place';
 /** build：組み立て / predict：予想 / test：試験中 / result：結果 / replay：再生 */
 type Phase = 'build' | 'predict' | 'test' | 'result' | 'replay';
 let phase: Phase = 'build';
@@ -92,7 +92,11 @@ function openStage(s: Stage | null): void {
   }
   menu.hidden = true;
 
-  $('stage-no').textContent = s ? (s.chapter === 'challenge' ? 'チャレンジ' : s.id) : '実験';
+  $('stage-no').textContent = s ? stageLabel(s) : '実験';
+  const loadBtn = $<HTMLButtonElement>('tool-load');
+  loadBtn.hidden = !s?.load;
+  if (s?.load) loadBtn.textContent = `${s.load.name}を置く`;
+  if (!s?.load && tool === 'load') tool = 'place';
   $('stage-name').textContent = s ? s.title : '自由に作る';
   $('request').textContent = s ? s.request : '好きな形・材料で建てて、地震の強さや揺れ方を変えて試してみよう。';
   hint.textContent = '点から点へドラッグして部材を置こう。地面の線につながった所が基礎になります。';
@@ -117,7 +121,7 @@ function openMenu(): void {
   const progress = loadProgress();
   const list = $('menu-list');
   list.innerHTML = '';
-  for (const chapter of ['1', '2', 'challenge']) {
+  for (const chapter of ['1', '2', 'challenge', '3', '4']) {
     const h = document.createElement('h3');
     h.textContent = CHAPTER_NAMES[chapter];
     list.appendChild(h);
@@ -134,7 +138,7 @@ function openMenu(): void {
             ? `記録 ${rec.bestHeight} m`
             : 'まだ記録なし'
           : `<span class="card-stars">${starText(rec?.stars ?? 0)}</span>`;
-      b.innerHTML = `<span class="no">${s.chapter === 'challenge' ? 'チャレンジ' : s.id}</span><br>${escapeHtml(s.title)}<br>${sub}`;
+      b.innerHTML = `<span class="no">${stageLabel(s)}</span><br>${escapeHtml(s.title)}<br>${sub}`;
       b.addEventListener('click', () => openStage(s));
       cards.appendChild(b);
     }
@@ -174,7 +178,7 @@ typeSelect.value = 'mixed';
 
 document.querySelectorAll<HTMLButtonElement>('.tool').forEach((b) =>
   b.addEventListener('click', () => {
-    tool = b.dataset.tool as 'place' | 'erase';
+    tool = b.dataset.tool as typeof tool;
     refreshPanel();
   }),
 );
@@ -310,7 +314,7 @@ function showResult(w: World): void {
   logAttempt({
     at: new Date().toISOString(),
     stageId: designId(),
-    stageTitle: stage ? `${stage.chapter === 'challenge' ? 'チャレンジ' : stage.id} ${stage.title}` : '自由に作る',
+    stageTitle: stage ? `${stageLabel(stage)} ${stage.title}` : '自由に作る',
     cleared: ev.cleared,
     stars: stage ? ev.stars : 0,
     height: ev.height,
@@ -322,7 +326,7 @@ function showResult(w: World): void {
 
   lastResult = stage
     ? {
-        stage: `${isChallenge ? 'チャレンジ' : stage.id} ${stage.title}`,
+        stage: `${stageLabel(stage)} ${stage.title}`,
         // ランキングを高さで並べたとき、倒れた建物が上に来ないよう、クリアしなかったら 0m にする
         height: ev.cleared ? ev.height : 0,
         stars: ev.stars,
@@ -700,6 +704,10 @@ canvas.addEventListener('pointerdown', (e) => {
   if (phase !== 'build') return;
   canvas.setPointerCapture(e.pointerId);
   const p = eventPoint(e);
+  if (tool === 'load') {
+    placeLoad(p.y);
+    return;
+  }
   if (tool === 'erase') {
     const i = memberAt(p);
     if (i !== null) {
@@ -741,6 +749,18 @@ canvas.addEventListener('pointerup', () => {
 canvas.addEventListener('pointerleave', () => {
   hoverMember = null;
 });
+
+/** 重いもの（機械など）を、タップした高さにいちばん近い床に置く */
+function placeLoad(y: number): void {
+  if (!stage?.load) return;
+  const levels = [...new Set(design.nodes.filter((n) => n.y > 0).map((n) => n.y))];
+  if (levels.length === 0) return;
+  const best = levels.reduce((a, b) => (Math.abs(b - y) < Math.abs(a - y) ? b : a));
+  design.loads = [{ y: best, mass: stage.load.mass, name: stage.load.name }];
+  persist();
+  refreshPanel();
+  hint.textContent = `高さ${best}mの床に${stage.load.name}を置きました。ほかの階に動かすには、その床をタップしよう。`;
+}
 
 // ---------- 描画ループ ----------
 

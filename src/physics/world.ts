@@ -6,7 +6,7 @@
 // 三角形（筋交い）があると部材の伸び縮みで耐えるので揺れに強くなる。
 
 import { MATERIALS, type Material } from './materials';
-import type { Design } from './design';
+import type { Design, DesignLoad } from './design';
 import { groundOffset, type Quake } from './quake';
 
 export const GRAVITY = 9.8;
@@ -80,6 +80,8 @@ export interface World {
   /** 倒れた時刻（秒） */
   collapseTime: number | null;
   firstBreak: FirstBreak | null;
+  /** 重いもの（描画用） */
+  loads: DesignLoad[];
 }
 
 function otherEnd(m: Member, node: number): number {
@@ -112,6 +114,12 @@ export function createWorld(design: Design, quake: Quake | null = null): World {
     baseY: n.y,
   }));
 
+  // 重いもの：その高さの床のつなぎ目に、重さを等しく分けて足す（つなぎ目がなければ何もしない）
+  for (const load of design.loads ?? []) {
+    const floor = nodes.filter((p) => p.baseY === load.y && !p.support);
+    for (const n of floor) n.mass += load.mass / floor.length;
+  }
+
   const members: Member[] = design.members.map((dm) => {
     const a = nodes[dm.a];
     const b = nodes[dm.b];
@@ -141,6 +149,7 @@ export function createWorld(design: Design, quake: Quake | null = null): World {
     collapsed: false,
     collapseTime: null,
     firstBreak: null,
+    loads: design.loads ?? [],
   };
 
   // 接合部：各節点で、となり合う部材どうしを回転ばねでつなぐ
