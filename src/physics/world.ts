@@ -74,7 +74,7 @@ export interface World {
   time: number;
   quake: Quake | null;
   initialHeight: number;
-  /** 最上部の横揺れの最大値（m） */
+  /** 最上部の横揺れの最大値（m）。土台（免震なら台）に対するずれ */
   maxDrift: number;
   collapsed: boolean;
   /** 倒れた時刻（秒） */
@@ -410,7 +410,8 @@ function updateStatus(world: World): void {
   for (const n of world.nodes) if (!top || n.baseY > top.baseY) top = n;
   if (!top) return;
   const gx = world.quake ? groundOffset(world.quake, world.time - SETTLE_TIME) : 0;
-  const drift = Math.abs(top.x - (top.baseX + gx));
+  // 揺れ幅は建物の土台（免震なら免震ゴムの上の台）からのずれで測る。台ごとゆっくり動く分は建物の揺れに数えない
+  const drift = Math.abs(top.x - (top.baseX + gx + (world.isolation?.u ?? 0)));
   world.maxDrift = Math.max(world.maxDrift, drift);
 
   const currentHeight = world.nodes.reduce((h, n) => Math.max(h, n.y), 0);

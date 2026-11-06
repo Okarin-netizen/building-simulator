@@ -2,6 +2,7 @@
 // 端末のブラウザ内にだけ保存する。使えない環境でもエラーにしない。
 
 import type { Design } from '../physics/design';
+import { MATERIALS } from '../physics/materials';
 
 const PROGRESS_KEY = 'saikou-tower-progress-v1';
 const DESIGN_KEY = (id: string) => `saikou-tower-design-${id}-v1`;
@@ -32,7 +33,10 @@ function write(key: string, value: unknown): void {
 }
 
 export function loadProgress(): Progress {
-  return read<Progress>(PROGRESS_KEY) ?? {};
+  const p = read<Progress>(PROGRESS_KEY);
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return {};
+  for (const k of Object.keys(p)) if (!p[k] || typeof p[k] !== 'object') delete p[k];
+  return p;
 }
 
 /** よりよい結果のときだけ記録を更新する */
@@ -47,9 +51,23 @@ export function recordResult(stageId: string, stars: number, height?: number): P
   return progress;
 }
 
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** 保存した設計図が正しい形か確かめる。壊れたデータで画面が開かなくならないようにする */
+export function isValidDesign(d: unknown): d is Design {
+  if (!d || typeof d !== 'object') return false;
+  const { nodes, members, loads } = d as Partial<Design>;
+  if (!Array.isArray(nodes) || !Array.isArray(members)) return false;
+  if (!nodes.every((n) => n && isNum(n.x) && isNum(n.y))) return false;
+  const okIndex = (i: unknown) => Number.isInteger(i) && (i as number) >= 0 && (i as number) < nodes.length;
+  if (!members.every((m) => m && okIndex(m.a) && okIndex(m.b) && m.a !== m.b && typeof m.material === 'string' && Object.prototype.hasOwnProperty.call(MATERIALS, m.material))) return false;
+  if (loads !== undefined && !(Array.isArray(loads) && loads.every((l) => l && isNum(l.y) && isNum(l.mass)))) return false;
+  return true;
+}
+
 export function loadDesign(id: string): Design | null {
-  const d = read<Design>(DESIGN_KEY(id));
-  return d && Array.isArray(d.nodes) && Array.isArray(d.members) ? d : null;
+  const d = read<unknown>(DESIGN_KEY(id));
+  return isValidDesign(d) ? d : null;
 }
 
 export function saveDesign(id: string, design: Design): void {
@@ -78,7 +96,7 @@ export interface Attempt {
 
 export function loadAttempts(): Attempt[] {
   const list = read<Attempt[]>(ATTEMPTS_KEY);
-  return Array.isArray(list) ? list : [];
+  return Array.isArray(list) ? list.filter((a) => a && typeof a === 'object' && typeof a.at === 'string') : [];
 }
 
 export function logAttempt(a: Attempt): Attempt[] {
@@ -95,7 +113,8 @@ export function clearAttempts(): void {
 export type Notes = Record<string, string>;
 
 export function loadNotes(): Notes {
-  return read<Notes>(NOTES_KEY) ?? {};
+  const n = read<Notes>(NOTES_KEY);
+  return n && typeof n === 'object' && !Array.isArray(n) ? n : {};
 }
 
 export function saveNotes(notes: Notes): void {
