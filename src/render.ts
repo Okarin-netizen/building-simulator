@@ -40,14 +40,14 @@ export function stressColor(ratio: number): string {
 }
 
 function drawBackground(ctx: CanvasRenderingContext2D, v: Viewport, w: number, h: number, groundShift: number): void {
-  ctx.fillStyle = '#eef4fb';
+  ctx.fillStyle = '#dfeef7';
   ctx.fillRect(0, 0, w, h);
 
   // 1m ごとの方眼
   ctx.lineWidth = 1;
   for (let x = Math.ceil(VIEW.minX); x <= VIEW.maxX; x++) {
     const { sx } = toScreen(v, x, 0);
-    ctx.strokeStyle = x % 5 === 0 ? '#c9d6e6' : '#dde6f1';
+    ctx.strokeStyle = x % 5 === 0 ? '#bcd3e3' : '#cfe1ec';
     ctx.beginPath();
     ctx.moveTo(sx, 0);
     ctx.lineTo(sx, v.groundY);
@@ -55,29 +55,29 @@ function drawBackground(ctx: CanvasRenderingContext2D, v: Viewport, w: number, h
   }
   for (let y = 1; y <= VIEW.maxY; y++) {
     const { sy } = toScreen(v, 0, y);
-    ctx.strokeStyle = y % 5 === 0 ? '#c9d6e6' : '#dde6f1';
+    ctx.strokeStyle = y % 5 === 0 ? '#bcd3e3' : '#cfe1ec';
     ctx.beginPath();
     ctx.moveTo(0, sy);
     ctx.lineTo(w, sy);
     ctx.stroke();
     if (y % 5 === 0) {
-      ctx.fillStyle = '#7d8894';
-      ctx.font = '12px system-ui';
+      ctx.fillStyle = '#5a6b78';
+      ctx.font = 'bold 12px system-ui';
       ctx.fillText(`${y}m`, 4, sy - 3);
     }
   }
 
   // 地面（地震中は横にずれる）
   const shiftPx = groundShift * v.scale;
-  ctx.fillStyle = '#b89b72';
+  ctx.fillStyle = '#8a6a43';
   ctx.fillRect(0, v.groundY, w, h - v.groundY);
-  ctx.strokeStyle = '#7a5f3a';
-  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#5a4126';
+  ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(0, v.groundY);
   ctx.lineTo(w, v.groundY);
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(90, 64, 30, 0.35)';
+  ctx.strokeStyle = 'rgba(40, 26, 10, 0.35)';
   ctx.lineWidth = 2;
   const step = 24;
   const offset = ((shiftPx % step) + step) % step;
@@ -87,6 +87,35 @@ function drawBackground(ctx: CanvasRenderingContext2D, v: Viewport, w: number, h
     ctx.lineTo(x - 10, v.groundY + 18);
     ctx.stroke();
   }
+}
+
+/** 目標の高さの線 */
+function drawGoalLine(ctx: CanvasRenderingContext2D, v: Viewport, w: number, goalHeight: number): void {
+  if (goalHeight <= 0) return;
+  const { sy } = toScreen(v, 0, goalHeight);
+  ctx.save();
+  ctx.strokeStyle = '#2e9d55';
+  ctx.lineWidth = 3;
+  ctx.setLineDash([12, 8]);
+  ctx.beginPath();
+  ctx.moveTo(0, sy);
+  ctx.lineTo(w, sy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  // 緑の札に「目標 ○m」
+  const label = `目標 ${goalHeight}m`;
+  ctx.font = 'bold 14px system-ui';
+  const tw = ctx.measureText(label).width;
+  const bx = 12;
+  const by = sy - 30;
+  ctx.fillStyle = '#2e7d4a';
+  ctx.beginPath();
+  ctx.roundRect(bx, by, tw + 20, 24, 6);
+  ctx.fill();
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, bx + 10, by + 12);
+  ctx.restore();
 }
 
 function drawNodeDot(ctx: CanvasRenderingContext2D, sx: number, sy: number, fill: string, stroke: string, r = 5): void {
@@ -112,8 +141,10 @@ export function drawDesign(
   design: Design,
   preview: { x1: number; y1: number; x2: number; y2: number; color: string; ok: boolean } | null,
   hoverMember: number | null,
+  goalHeight = 0,
 ): void {
   drawBackground(ctx, v, w, h, 0);
+  drawGoalLine(ctx, v, w, goalHeight);
 
   ctx.lineCap = 'round';
   design.members.forEach((m, i) => {
@@ -155,8 +186,17 @@ export function drawDesign(
 }
 
 /** 地震中の建物を、部材にかかる力の色で描く */
-export function drawWorld(ctx: CanvasRenderingContext2D, v: Viewport, w: number, h: number, world: World, groundShift: number): void {
+export function drawWorld(
+  ctx: CanvasRenderingContext2D,
+  v: Viewport,
+  w: number,
+  h: number,
+  world: World,
+  groundShift: number,
+  goalHeight = 0,
+): void {
   drawBackground(ctx, v, w, h, groundShift);
+  drawGoalLine(ctx, v, w, goalHeight);
 
   ctx.lineCap = 'round';
   for (const m of world.members) {
