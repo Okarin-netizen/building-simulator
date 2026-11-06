@@ -338,13 +338,11 @@ canvas {
 .hint {
   position: absolute;
   left: 16px;
-  /* 地面の線と基礎の印に重ならないよう、地面の茶色の帯の中に出す */
-  bottom: 3px;
+  bottom: 14px;
   right: 16px;
   margin: 0;
   pointer-events: none;
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 14px;
   font-weight: 700;
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
