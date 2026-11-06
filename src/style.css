@@ -105,8 +105,13 @@ button:disabled {
   cursor: default;
 }
 
-button.ghost {
+.top-actions {
   margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+button.ghost {
   border-color: var(--yellow);
   background: transparent;
   color: var(--yellow);
@@ -430,6 +435,126 @@ canvas {
   margin-top: 12px;
 }
 
+/* 予想の答え合わせ */
+.result .answer {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 14px;
+  line-height: 1.6;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.result .answer small {
+  color: var(--quiet);
+}
+
+.verdict {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: var(--display);
+  font-size: 15px;
+  color: #fff;
+  background: var(--quiet);
+}
+
+.answer.hit .verdict,
+.sheet td.v-hit {
+  background: var(--red);
+}
+
+.answer.near .verdict,
+.sheet td.v-near {
+  background: var(--star);
+}
+
+/* ---------- 予想の札 ---------- */
+
+.predict-box {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  width: min(400px, calc(100% - 32px));
+  padding: 16px 18px;
+  background: var(--yellow-soft);
+  border: 3px solid var(--ink);
+  border-radius: 16px;
+  box-shadow: 0 6px 0 var(--ink);
+}
+
+.predict-box h3 {
+  margin: 0 0 6px;
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 20px;
+}
+
+.predict-box p {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.predict-box button.go {
+  margin-top: 4px;
+}
+
+/* ---------- スロー再生 ---------- */
+
+.replay-bar {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 3px solid var(--ink);
+  border-radius: 14px;
+  box-shadow: 0 5px 0 var(--ink);
+}
+
+.replay-bar[hidden],
+.predict-box[hidden] {
+  display: none;
+}
+
+.replay-bar input[type='range'] {
+  flex: 1 1 160px;
+  accent-color: var(--red);
+  height: 32px;
+}
+
+.replay-time {
+  font-family: var(--display);
+  min-width: 4.5em;
+}
+
+.replay-speed {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.replay-speed select {
+  font: inherit;
+  min-height: 40px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
 /* ---------- ステージ一覧 ---------- */
 
 .menu {
@@ -500,6 +625,130 @@ canvas {
   margin-top: 16px;
   border-top: 2px dashed var(--line);
   padding-top: 12px;
+}
+
+/* ---------- ふりかえりシート ---------- */
+
+.sheet-card {
+  width: min(900px, 100%);
+}
+
+.sheet-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.sheet-title-print {
+  display: none;
+}
+
+.sheet-names {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sheet-names label {
+  flex: 1 1 200px;
+  font-weight: 700;
+}
+
+.sheet input[type='text'],
+.sheet textarea {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  font: inherit;
+  font-weight: 500;
+  padding: 6px 8px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+}
+
+.sheet textarea {
+  resize: vertical;
+}
+
+.question {
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.sheet table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.sheet th,
+.sheet td {
+  border: 1px solid var(--line);
+  padding: 4px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.sheet th {
+  background: var(--yellow-soft);
+}
+
+.sheet td[class^='v-'] {
+  font-weight: 700;
+  color: #fff;
+  background: var(--quiet);
+}
+
+.sheet-empty {
+  color: var(--quiet);
+  font-size: 14px;
+}
+
+.sheet-actions {
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+
+@media print {
+  body > *:not(#sheet) {
+    display: none !important;
+  }
+  html,
+  body {
+    height: auto;
+    background: #fff;
+  }
+  .sheet {
+    position: static;
+    background: none;
+    padding: 0;
+  }
+  .sheet-card {
+    width: 100%;
+    max-height: none;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+  }
+  .sheet-title-print {
+    display: inline;
+    font-weight: 700;
+  }
+  .sheet-actions {
+    display: none;
+  }
+  .sheet textarea,
+  .sheet input[type='text'] {
+    border: 1px solid #999;
+  }
+  .sheet td[class^='v-'] {
+    color: var(--ink);
+    background: none;
+  }
 }
 
 /* ---------- せまい画面 ---------- */

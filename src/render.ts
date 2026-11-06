@@ -2,7 +2,7 @@
 
 import { MATERIALS } from './physics/materials';
 import type { Design } from './physics/design';
-import { memberStressRatio, type World } from './physics/world';
+import { memberStressRatio, type FirstBreak, type World } from './physics/world';
 
 /** 画面に映す範囲（メートル） */
 export const VIEW = { minX: -6, maxX: 16, maxY: 24 };
@@ -128,6 +128,55 @@ function drawNodeDot(ctx: CanvasRenderingContext2D, sx: number, sy: number, fill
   ctx.stroke();
 }
 
+/** 吹き出しの札とピン（予想の印など） */
+function drawPin(ctx: CanvasRenderingContext2D, sx: number, sy: number, label: string, color: string): void {
+  ctx.save();
+  ctx.font = 'bold 14px system-ui';
+  const tw = ctx.measureText(label).width;
+  const bw = tw + 18;
+  const bh = 26;
+  const bx = sx - bw / 2;
+  const by = sy - 22 - bh;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(sx, sy - 4);
+  ctx.lineTo(sx, by + bh);
+  ctx.stroke();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(sx, sy, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect(bx, by, bw, bh, 8);
+  ctx.fill();
+  ctx.strokeStyle = '#1f1f1f';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.fillText(label, sx, by + bh / 2 + 1);
+  ctx.restore();
+}
+
+/** 最初にこわれた所を示す、点滅する輪 */
+function drawBreakRing(ctx: CanvasRenderingContext2D, sx: number, sy: number, pulse: number): void {
+  ctx.save();
+  ctx.strokeStyle = '#1f1f1f';
+  ctx.lineWidth = 5;
+  const r = 16 + 5 * pulse;
+  ctx.beginPath();
+  ctx.arc(sx, sy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = '#f6c343';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.restore();
+}
+
+export const PREDICT_COLOR = '#e8452c';
+
 function memberWidth(v: Viewport): number {
   return Math.max(4, v.scale * 0.22);
 }
@@ -142,6 +191,7 @@ export function drawDesign(
   preview: { x1: number; y1: number; x2: number; y2: number; color: string; ok: boolean } | null,
   hoverMember: number | null,
   goalHeight = 0,
+  pinMember: number | null = null,
 ): void {
   drawBackground(ctx, v, w, h, 0);
   drawGoalLine(ctx, v, w, goalHeight);
@@ -183,6 +233,23 @@ export function drawDesign(
     ctx.globalAlpha = 1;
     drawNodeDot(ctx, b.sx, b.sy, '#ffffff', '#3c4450');
   }
+
+  if (pinMember !== null && design.members[pinMember]) {
+    const m = design.members[pinMember];
+    const a = design.nodes[m.a];
+    const b = design.nodes[m.b];
+    const p = toScreen(v, (a.x + b.x) / 2, (a.y + b.y) / 2);
+    drawPin(ctx, p.sx, p.sy, 'わたしの予想', PREDICT_COLOR);
+  }
+}
+
+export interface WorldMarks {
+  /** 予想した部材 */
+  predictMember?: number | null;
+  /** 最初にこわれた所（その時刻を過ぎたら輪を描く） */
+  firstBreak?: FirstBreak | null;
+  /** 0〜1 の点滅の強さ */
+  pulse?: number;
 }
 
 /** 地震中の建物を、部材にかかる力の色で描く */
@@ -194,6 +261,7 @@ export function drawWorld(
   world: World,
   groundShift: number,
   goalHeight = 0,
+  marks: WorldMarks = {},
 ): void {
   drawBackground(ctx, v, w, h, groundShift);
   drawGoalLine(ctx, v, w, goalHeight);
@@ -246,4 +314,27 @@ export function drawWorld(
       drawNodeDot(ctx, p.sx, p.sy, stressColor(info.ratio), '#3c4450', 5 + 2 * Math.min(1, info.ratio));
     }
   });
+
+  const fb = marks.firstBreak;
+  if (fb && world.time >= fb.time) {
+    let px: number;
+    let py: number;
+    if (fb.kind === 'joint') {
+      px = world.nodes[fb.node].x;
+      py = world.nodes[fb.node].y;
+    } else {
+      const m = world.members[fb.index];
+      px = (world.nodes[m.a].x + world.nodes[m.b].x) / 2;
+      py = (world.nodes[m.a].y + world.nodes[m.b].y) / 2;
+    }
+    const p = toScreen(v, px, py);
+    drawBreakRing(ctx, p.sx, p.sy, marks.pulse ?? 0);
+  }
+
+  const pm = marks.predictMember;
+  if (pm !== null && pm !== undefined && world.members[pm]) {
+    const m = world.members[pm];
+    const p = toScreen(v, (world.nodes[m.a].x + world.nodes[m.b].x) / 2, (world.nodes[m.a].y + world.nodes[m.b].y) / 2);
+    drawPin(ctx, p.sx, p.sy, '予想', PREDICT_COLOR);
+  }
 }

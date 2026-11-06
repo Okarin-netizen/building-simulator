@@ -18,7 +18,10 @@
         <h1>最高タワー工房</h1>
         <span class="stage-no" id="stage-no"></span>
         <span class="stage-name" id="stage-name"></span>
-        <button type="button" id="open-menu" class="ghost">ステージ一覧</button>
+        <div class="top-actions">
+          <button type="button" id="open-sheet" class="ghost">ふりかえり</button>
+          <button type="button" id="open-menu" class="ghost">ステージ一覧</button>
+        </div>
       </div>
       <div class="hazard" aria-hidden="true"></div>
     </header>
@@ -98,7 +101,31 @@
       <div class="stage">
         <p class="hint" id="hint"></p>
         <canvas id="canvas"></canvas>
+        <div class="predict-box" id="predict-box" hidden>
+          <h3>試験の前に予想しよう</h3>
+          <p id="predict-text">いちばん先にこわれそうな部材をタップしてください。</p>
+          <div class="buttons">
+            <button type="button" id="predict-none">どこもこわれないと思う</button>
+            <button type="button" id="predict-cancel">やめる</button>
+            <button type="button" id="predict-go" class="go" disabled>この予想で地震スタート！</button>
+          </div>
+        </div>
         <div class="result" id="result" hidden></div>
+        <div class="replay-bar" id="replay-bar" hidden>
+          <button type="button" id="replay-play" aria-label="再生・一時停止">一時停止</button>
+          <input type="range" id="replay-seek" min="0" max="1000" value="0" aria-label="再生する位置" />
+          <span class="replay-time" id="replay-time">0.0秒</span>
+          <button type="button" id="replay-break">最初にこわれた瞬間へ</button>
+          <label class="replay-speed">速さ
+            <select id="replay-speed">
+              <option value="0.1">1/10</option>
+              <option value="0.25" selected>1/4</option>
+              <option value="0.5">1/2</option>
+              <option value="1">ふつう</option>
+            </select>
+          </label>
+          <button type="button" id="replay-close" class="primary">結果にもどる</button>
+        </div>
       </div>
     </main>
 
@@ -108,6 +135,28 @@
         <div id="menu-list"></div>
         <div class="menu-free">
           <button type="button" id="free-mode">自由に作る（実験モード）</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="menu sheet" id="sheet" hidden>
+      <div class="menu-card sheet-card">
+        <div class="sheet-head">
+          <h2>ふりかえりシート</h2>
+          <span class="sheet-title-print">最高タワー工房</span>
+        </div>
+        <div class="sheet-names">
+          <label>名前 <input type="text" id="note-name" data-note="name" autocomplete="off" /></label>
+          <label>組・班 <input type="text" id="note-group" data-note="group" autocomplete="off" /></label>
+        </div>
+        <h3>試験の記録</h3>
+        <div id="sheet-attempts"></div>
+        <h3>考えたこと</h3>
+        <div id="sheet-questions"></div>
+        <div class="buttons sheet-actions">
+          <button type="button" id="sheet-print" class="primary">印刷する</button>
+          <button type="button" id="sheet-clear">記録を消す</button>
+          <button type="button" id="sheet-close">閉じる</button>
         </div>
       </div>
     </div>
