@@ -7,7 +7,7 @@ import type { QuakeLevel, QuakeType } from '../physics/quake';
 
 export interface Stage {
   id: string;
-  chapter: 1 | 2 | 'challenge';
+  chapter: 1 | 2 | 3 | 4 | 'challenge';
   title: string;
   /** 依頼主からの依頼文 */
   request: string;
@@ -23,6 +23,24 @@ export interface Stage {
   hint: string;
   /** クリアしたときの「なぜ？」カード */
   lesson: string;
+  /** 生徒が置き場所を決める重いもの（第3章） */
+  load?: { name: string; mass: number };
+}
+
+/** 幅を bays 区画に分けた、筋交い入りの枠（幅 bays × bay m） */
+export function wideTower(floors: number, bays: number, material: MaterialId = 'wood', bay = 4): Design {
+  const d = emptyDesign();
+  for (let f = 0; f < floors; f++) {
+    const y0 = f * 3;
+    const y1 = y0 + 3;
+    for (let b = 0; b <= bays; b++) addMember(d, b * bay, y0, b * bay, y1, material);
+    for (let b = 0; b < bays; b++) {
+      addMember(d, b * bay, y1, (b + 1) * bay, y1, material);
+      if ((f + b) % 2 === 0) addMember(d, b * bay, y0, (b + 1) * bay, y1, material);
+      else addMember(d, (b + 1) * bay, y0, b * bay, y1, material);
+    }
+  }
+  return d;
 }
 
 /** 階ごとに材料を指定した、筋交い入りの枠 */
@@ -137,13 +155,75 @@ export const STAGES: Stage[] = [
     hint: 'これまでの章で見つけた工夫（三角形・材料の使い分け）を全部使ってみよう。',
     lesson: '班のみんなの記録と比べて、高いタワーの工夫を説明し合ってみよう。',
   },
+  {
+    id: '3-1',
+    chapter: 3,
+    title: '重い機械をどこに置く？',
+    request: 'この4階建てに、重い機械（50）を1台置きます。強い地震に耐えられる階に置いてください。',
+    goalHeight: 12,
+    budget: 70,
+    quake: { level: 'strong', type: 'mixed' },
+    materials: ['wood'],
+    initial: () => bracedTower(['wood', 'wood', 'wood', 'wood']),
+    hint: '「機械を置く」を選んで床をタップすると、その階に機械を置けます。高い階と低い階で試して比べよう。',
+    lesson:
+      '重いものが高い所にあると、建物全体の重心が高くなり、地震のときに上の方が大きく振られて倒れやすくなります。重いものはなるべく低い階に置くと、重心が下がって安定します。',
+    load: { name: '機械', mass: 50 },
+  },
+  {
+    id: '3-2',
+    chapter: 3,
+    title: '細長いタワー',
+    request: '木材だけで、高さ21mの7階建てを、強い地震に耐えるように建ててください。',
+    goalHeight: 21,
+    budget: 200,
+    quake: { level: 'strong', type: 'mixed' },
+    materials: ['wood'],
+    initial: emptyDesign,
+    hint: '幅4mの細いタワーは倒れやすいよ。柱を3本にして、幅を8mに広げてみよう。',
+    lesson:
+      '細長い建物は、揺れると根元の柱に大きな力がかかり、倒れやすくなります。幅を広げると、同じ揺れでも根元にかかる力が小さくなり、どっしり安定します。高さに対して幅が大切です。',
+  },
+  {
+    id: '4-1',
+    chapter: 4,
+    title: '小刻みな揺れの町',
+    request: 'この町の地震は、小刻みに速く揺れます。この3階建ては倒れてしまうので、倒れないようにしてください。',
+    goalHeight: 9,
+    budget: 100,
+    quake: { level: 'strong', type: 'short' },
+    materials: ['wood', 'steel'],
+    initial: () => bracedTower(['wood', 'wood', 'wood']),
+    hint: 'この建物は、ふつうの揺れなら倒れません。1つの階だけ鉄骨に変えて、建物の揺れ方を変えてみよう。',
+    lesson:
+      '建物には、それぞれ揺れやすい速さ（固有周期）があります。地震の揺れの速さと建物の揺れやすい速さが合うと、揺れがどんどん大きくなります。これを「共振」といいます。材料や形を変えて揺れやすい速さをずらすと、共振を避けられます。',
+  },
+  {
+    id: '4-2',
+    chapter: 4,
+    title: 'ゆったりした揺れ（長周期地震動）',
+    request: '遠くの大地震で、ゆったりと大きく揺れる地震が来ます。高さ21mの7階建てを、倒れないように建ててください。',
+    goalHeight: 21,
+    budget: 250,
+    quake: { level: 'strong', type: 'long' },
+    materials: ['wood', 'steel', 'concrete'],
+    initial: emptyDesign,
+    hint: '下の2階だけ鉄骨では足りないよ。鉄骨を何階分にすれば共振しなくなるか、1階ずつ増やして試そう。',
+    lesson:
+      '高い建物ほど、ゆっくり揺れやすい（固有周期が長い）ので、ゆったりした揺れ（長周期地震動）と共振しやすくなります。実際に、遠くの大地震で高層ビルが長い時間大きく揺れたことがあります。建物を硬くして揺れやすい速さを変えることが対策になります。',
+  },
 ];
 
 export const CHAPTER_NAMES: Record<string, string> = {
   '1': '第1章 四角と三角',
   '2': '第2章 材料を選ぶ',
+  '3': '発展 第3章 重さと重心',
+  '4': '発展 第4章 揺れ方と共振',
   challenge: 'チャレンジ',
 };
+
+/** ステージの番号の表示（例：1-2、チャレンジ） */
+export const stageLabel = (s: Stage) => (s.chapter === 'challenge' ? 'チャレンジ' : s.id);
 
 export function stageById(id: string): Stage | undefined {
   return STAGES.find((s) => s.id === id);

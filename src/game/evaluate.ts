@@ -16,6 +16,11 @@ export interface CanTest {
 export function canStartTest(stage: Stage | null, design: Design): CanTest {
   if (design.members.length === 0) return { ok: false, reason: '部材を置いてから試験しよう。' };
   if (!design.nodes.some((n) => n.y <= 0)) return { ok: false, reason: '地面につながった部材がありません。いちばん下の線から柱を立てよう。' };
+  if (stage?.load) {
+    const load = design.loads?.[0];
+    if (!load || !design.nodes.some((n) => n.y === load.y && n.y > 0))
+      return { ok: false, reason: `「${stage.load.name}を置く」を選んで、${stage.load.name}を置く階の床をタップしよう。` };
+  }
   if (stage && designCost(design) > stage.budget)
     return { ok: false, reason: `予算オーバーです（${designCost(design)} / ${stage.budget} 万円）。部材を減らすか、安い材料にしよう。` };
   return { ok: true };
