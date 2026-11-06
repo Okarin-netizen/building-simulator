@@ -36,12 +36,14 @@ export const QUAKE_TYPES: Record<QuakeType, { name: string; waves: QuakeWave[] }
   },
   mixed: {
     name: 'ふつうの揺れ',
-    waves: [
-      { period: 0.4, weight: 0.3, phase: 0 },
-      { period: 0.8, weight: 0.3, phase: 2.1 },
-      { period: 1.4, weight: 0.25, phase: 0.7 },
-      { period: 2.2, weight: 0.15, phase: 4.0 },
-    ],
+    // 短い周期から長い周期まで、同じくらいの強さで混ぜる。
+    // どの高さの建物にも同じように揺れが届くので、「高い建物ほど大きな力を受ける」ことが分かりやすくなる。
+    // （周期の少ない波だけだと、建物の揺れやすい周期と合ったときだけ大きく揺れる「共振のくじ引き」になってしまう）
+    waves: [0.3, 0.42, 0.55, 0.7, 0.9, 1.15, 1.5, 2.0, 2.6, 3.3, 4.2].map((period, i) => ({
+      period,
+      weight: 1 / 11,
+      phase: (i * 2.39) % (2 * Math.PI),
+    })),
   },
   long: {
     name: 'ゆったりした揺れ',

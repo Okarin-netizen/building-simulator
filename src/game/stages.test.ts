@@ -4,7 +4,8 @@ import { designCost, frameDesign, type Design } from '../physics/design';
 import { makeQuake } from '../physics/quake';
 import { createWorld, step } from '../physics/world';
 import { canStartTest, evaluate } from './evaluate';
-import { bracedTower, stageById, type Stage } from './stages';
+import { bracedTower, stageById, STAGES, type Stage } from './stages';
+import { VIEW } from '../render';
 
 function play(stage: Stage, design: Design) {
   expect(canStartTest(stage, design).ok).toBe(true);
@@ -50,6 +51,8 @@ test('2-2：最初のコンクリートの建物は倒れ、材料を変えれ�
   const s = stage('2-2');
   expect(play(s, s.initial()).cleared).toBe(false);
   expect(play(s, bracedTower([S, W, W, W])).cleared).toBe(true);
+  // 軽い木材に置きかえるだけでも耐える（重さを減らす工夫）
+  expect(play(s, bracedTower([W, W, W, W])).cleared).toBe(true);
 });
 
 test('2-3：8階建ては材料の使い分けでクリアできる', () => {
@@ -61,4 +64,22 @@ test('2-3：8階建ては材料の使い分けでクリアできる', () => {
 test('高さが目標に届かなければクリアにならない', () => {
   const s = stage('1-2');
   expect(play(s, bracedTower([W, W])).cleared).toBe(false);
+});
+
+test('高さが上がるほど不利になる：木材だけの筋交い入りタワーは5階までなら耐え、6階から上はどの高さでも倒れる', () => {
+  const s = stage('challenge');
+  for (let floors = 3; floors <= 10; floors++) {
+    const ev = play(s, bracedTower(Array(floors).fill(W)));
+    expect({ floors, stood: ev.cleared }).toEqual({ floors, stood: floors <= 5 });
+  }
+});
+
+test('最高タワーチャレンジ：材料を使い分ければ8階建てまで建つが、同じ作り方で9階建ては倒れる', () => {
+  const s = stage('challenge');
+  expect(play(s, bracedTower([S, S, W, W, W, W, W, W])).cleared).toBe(true);
+  expect(play(s, bracedTower([S, S, S, W, W, W, W, W, W])).cleared).toBe(false);
+});
+
+test('どのステージの目標の高さも、画面の中で建てられる', () => {
+  for (const s of STAGES) expect(s.goalHeight).toBeLessThan(VIEW.maxY);
 });
