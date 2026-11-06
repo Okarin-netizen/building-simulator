@@ -323,6 +323,11 @@ export function windSpeed(w: Wind, t: number): number {
   return w.speed * ramp * gust;
 }
 
+/** 高さ y m での風の強まり方（高さ10mで1。高い所ほど強い） */
+export function windHeightFactor(y: number): number {
+  return Math.pow(Math.max(y, 1) / 10, 0.4);
+}
+
 /**
  * 風の力：高い所ほど風が強い。
  * 横から見た図なので、風を受ける面の広さは「高さ」で決まり、建物の幅や柱の本数にはよらない。
@@ -338,8 +343,7 @@ function applyWindForces(world: World, t: number): void {
     const above = i === levels.length - 1 ? y : levels[i + 1];
     const tributary = (above - below) / 2;
     const floor = world.nodes.filter((n) => !n.support && n.baseY === y);
-    const heightFactor = Math.pow(Math.max(y, 1) / 10, 0.4);
-    const f = (WIND_FACTOR * v * v * heightFactor * tributary * WIND_DEPTH) / floor.length;
+    const f = (WIND_FACTOR * v * v * windHeightFactor(y) * tributary * WIND_DEPTH) / floor.length;
     for (const n of floor) n.fx += f;
   });
 }
