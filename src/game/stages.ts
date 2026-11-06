@@ -265,6 +265,8 @@ export const CHAPTER_NAMES: Record<string, string> = {
 
 /** ステージの番号の表示（例：1-2、チャレンジ） */
 export const stageLabel = (s: Stage) => (s.chapter === 'challenge' ? 'チャレンジ' : s.id);
+/** 番号つきの名前（例：1-2 3階建ての家） */
+export const stageFullTitle = (s: Stage) => `${stageLabel(s)} ${s.title}`;
 
 export function stageById(id: string): Stage | undefined {
   return STAGES.find((s) => s.id === id);

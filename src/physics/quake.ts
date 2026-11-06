@@ -54,7 +54,10 @@ export const QUAKE_TYPES: Record<QuakeType, { name: string; waves: QuakeWave[] }
   },
 };
 
-export function makeQuake(level: QuakeLevel, type: QuakeType = 'mixed', duration = 15): Quake {
+/** 地震・風の試験が続く時間（秒） */
+export const TEST_DURATION = 15;
+
+export function makeQuake(level: QuakeLevel, type: QuakeType = 'mixed', duration = TEST_DURATION): Quake {
   return { peakAccel: QUAKE_LEVELS[level].peakAccel, waves: QUAKE_TYPES[type].waves, duration };
 }
 
