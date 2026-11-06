@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>最高タワー工房（試作）</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <h1>最高タワー工房 <small>試作版</small></h1>
+      <p class="hint" id="hint">点から点へドラッグして部材を置こう。地面（いちばん下の線）につながった所が基礎になります。</p>
+    </header>
+
+    <main class="layout">
+      <aside class="panel" aria-label="道具">
+        <section>
+          <h2>材料</h2>
+          <div class="buttons" id="materials"></div>
+        </section>
+
+        <section>
+          <h2>道具</h2>
+          <div class="buttons">
+            <button type="button" class="tool active" data-tool="place">部材を置く</button>
+            <button type="button" class="tool" data-tool="erase">部材を消す</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>見本</h2>
+          <div class="buttons">
+            <button type="button" id="sample-square">四角い枠</button>
+            <button type="button" id="sample-braced">筋交い入り</button>
+            <button type="button" id="clear">全部消す</button>
+          </div>
+        </section>
+
+        <section>
+          <h2>地震</h2>
+          <label>強さ
+            <select id="quake-level"></select>
+          </label>
+          <label>揺れ方
+            <select id="quake-type"></select>
+          </label>
+          <label class="check"><input type="checkbox" id="slow" /> スロー再生</label>
+          <div class="buttons">
+            <button type="button" id="start" class="primary">地震を起こす</button>
+            <button type="button" id="reset" disabled>建て直す</button>
+          </div>
+        </section>
+
+        <section class="stats">
+          <div>高さ <strong id="stat-height">0</strong> m</div>
+          <div>費用 <strong id="stat-cost">0</strong> 万円</div>
+        </section>
+
+        <section class="legend" aria-label="色の見方">
+          <h2>色の見方（地震中）</h2>
+          <div class="scale"><span>余裕</span><span class="bar"></span><span>こわれそう</span></div>
+          <p>丸はつなぎ目。赤い丸は曲がりすぎて危ないつなぎ目です。</p>
+        </section>
+      </aside>
+
+      <div class="stage">
+        <canvas id="canvas"></canvas>
+        <div class="result" id="result" hidden></div>
+      </div>
+    </main>
+
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
