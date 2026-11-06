@@ -3,6 +3,7 @@
 
 import type { Design } from '../physics/design';
 import { MATERIALS } from '../physics/materials';
+import type { Verdict } from './predict';
 
 const PROGRESS_KEY = 'saikou-tower-progress-v1';
 const DESIGN_KEY = (id: string) => `saikou-tower-design-${id}-v1`;
@@ -91,7 +92,7 @@ export interface Attempt {
   cost: number;
   predicted: string;
   actual: string;
-  verdict: 'hit' | 'near' | 'miss';
+  verdict: Verdict;
 }
 
 export function loadAttempts(): Attempt[] {

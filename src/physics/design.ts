@@ -102,24 +102,27 @@ export function designHeight(design: Design): number {
 
 /**
  * 見本の建物。幅 width m、1階の高さ storyHeight m、floors 階建ての枠。
- * braced = true なら各階に筋交い（斜めの部材）を入れる。
+ * floorMaterials を渡すと、階ごとに材料を変えられる（下の階から順に。階数もその長さになる）。
+ * braced = true なら各階に筋交い（斜めの部材）を、階ごとに向きを変えて入れる。
  */
 export function frameDesign(opts: {
   floors: number;
   width?: number;
   storyHeight?: number;
   material?: MaterialId;
+  floorMaterials?: MaterialId[];
   braced?: boolean;
 }): Design {
-  const { floors, width = 4, storyHeight = 3, material = 'wood', braced = false } = opts;
+  const { width = 4, storyHeight = 3, material = 'wood', braced = false } = opts;
+  const floorMaterials = opts.floorMaterials ?? Array<MaterialId>(opts.floors).fill(material);
   const d = emptyDesign();
-  for (let f = 0; f < floors; f++) {
+  floorMaterials.forEach((m, f) => {
     const y0 = f * storyHeight;
     const y1 = (f + 1) * storyHeight;
-    addMember(d, 0, y0, 0, y1, material); // 左の柱
-    addMember(d, width, y0, width, y1, material); // 右の柱
-    addMember(d, 0, y1, width, y1, material); // 梁
-    if (braced) addMember(d, f % 2 === 0 ? 0 : width, y0, f % 2 === 0 ? width : 0, y1, material);
-  }
+    addMember(d, 0, y0, 0, y1, m); // 左の柱
+    addMember(d, width, y0, width, y1, m); // 右の柱
+    addMember(d, 0, y1, width, y1, m); // 梁
+    if (braced) addMember(d, f % 2 === 0 ? 0 : width, y0, f % 2 === 0 ? width : 0, y1, m); // 筋交い
+  });
   return d;
 }
