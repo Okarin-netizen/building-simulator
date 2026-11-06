@@ -4,6 +4,7 @@ import { addMember, designCost, frameDesign, type Design } from '../physics/desi
 import { makeQuake, TEST_DURATION } from '../physics/quake';
 import { createWorld, step } from '../physics/world';
 import { canStartTest, evaluate } from './evaluate';
+import { breakAdvice } from './predict';
 import { bracedTower, stageById, STAGES, wideTower, type Stage } from './stages';
 import { VIEW } from '../render';
 
@@ -158,4 +159,31 @@ test('6-2：コンクリートの5階建ては倒れ、免震ゴムを入れる�
   const ev = play(s, iso);
   expect(ev.cleared).toBe(true);
   expect(ev.checks[1].ok).toBe(true); // こわれた所が0
+});
+
+test('最高タワー：てっぺんに棒を立てて折れても記録にならない（一部がくずれた扱い）', () => {
+  const s = stage('challenge');
+  const d = bracedTower([S, S, W, W, W, W, W, W]);
+  addMember(d, 0, 24, 0, 29, W);
+  const ev = play(s, d);
+  expect(ev.cleared).toBe(false);
+  expect(ev.fell).not.toBe('none');
+});
+
+test('2-3：鉄骨を多めにして×の筋交いも入れると、星3つが取れる', () => {
+  const s = stage('2-3');
+  const d = bracedTower([S, S, S, S, W, W, W, W]);
+  addMember(d, 0, 12, 4, 15, W); // 5階に反対向きの筋交いを足して×にする
+  addMember(d, 4, 12, 0, 15, W);
+  expect(designCost(d)).toBeLessThanOrEqual(s.budget);
+  expect(play(s, d).stars).toBe(3);
+});
+
+test('材料が切りかわったすぐ上の階がこわれたら、その説明が出る', () => {
+  const s = stage('2-3');
+  const d = bracedTower([S, S, S, W, W, W, W, W]);
+  const world = createWorld(d, makeQuake(s.quake.level, s.quake.type));
+  for (let i = 0; i < 18 * 60; i++) step(world, 1 / 60);
+  expect(world.collapsed).toBe(true);
+  expect(breakAdvice(d, world.firstBreak)).toContain('材料が切りかわった');
 });

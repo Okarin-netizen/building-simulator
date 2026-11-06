@@ -10,16 +10,25 @@ export const VIEW = { minX: -6, maxX: 16, maxY: 30 };
 export const MAX_MEMBER_LENGTH = 6;
 
 export interface Viewport {
+  /** 画面に映す高さ（m）。ステージの目標の高さに合わせて拡大する */
+  maxY: number;
   scale: number; // 1m あたりのピクセル
   originX: number; // x = 0 の画面上の位置
   groundY: number; // y = 0 の画面上の位置
 }
 
-export function makeViewport(width: number, height: number): Viewport {
+/** 画面に映す高さ：目標の高さ＋6m（最低12m、最大 VIEW.maxY）。建物がもっと高ければそれに合わせる */
+export function viewHeightFor(goalHeight: number, buildingHeight = 0): number {
+  const want = goalHeight > 0 ? goalHeight + 6 : VIEW.maxY;
+  return Math.min(VIEW.maxY, Math.max(12, want, buildingHeight + 3));
+}
+
+export function makeViewport(width: number, height: number, maxY: number = VIEW.maxY): Viewport {
   const margin = 32;
-  const scale = Math.min((width - margin * 2) / (VIEW.maxX - VIEW.minX), (height - margin * 2) / VIEW.maxY);
+  const scale = Math.min((width - margin * 2) / (VIEW.maxX - VIEW.minX), (height - margin * 2) / maxY);
   const usedWidth = scale * (VIEW.maxX - VIEW.minX);
   return {
+    maxY,
     scale,
     originX: (width - usedWidth) / 2 - VIEW.minX * scale,
     groundY: height - margin,
@@ -70,11 +79,12 @@ function drawBackground(ctx: CanvasRenderingContext2D, v: Viewport, w: number, h
     ctx.strokeStyle = gridColor(x);
     strokeLine(ctx, { sx, sy: 0 }, { sx, sy: v.groundY });
   }
-  for (let y = 1; y <= VIEW.maxY; y++) {
+  for (let y = 1; y <= v.maxY; y++) {
     const { sy } = toScreen(v, 0, y);
-    ctx.strokeStyle = gridColor(y);
+    // 1階分（3m）ごとに線を濃くし、高さを書く
+    ctx.strokeStyle = y % 3 === 0 ? '#bcd3e3' : '#cfe1ec';
     strokeLine(ctx, { sx: 0, sy }, { sx: w, sy });
-    if (y % 5 === 0) {
+    if (y % 3 === 0) {
       ctx.fillStyle = '#5a6b78';
       ctx.font = 'bold 12px system-ui';
       ctx.fillText(`${y}m`, 4, sy - 3);
@@ -93,6 +103,22 @@ function drawBackground(ctx: CanvasRenderingContext2D, v: Viewport, w: number, h
   const step = 24;
   const offset = ((shiftPx % step) + step) % step;
   for (let x = -step + offset; x < w + step; x += step) strokeLine(ctx, { sx: x, sy: v.groundY + 6 }, { sx: x - 10, sy: v.groundY + 18 });
+}
+
+/** 部材を置ける点（方眼の交わる所）を、小さな点で示す */
+function drawGridDots(ctx: CanvasRenderingContext2D, v: Viewport): void {
+  ctx.save();
+  ctx.fillStyle = '#7d98ad';
+  const r = Math.max(1.5, Math.min(3, v.scale * 0.08));
+  for (let x = Math.ceil(VIEW.minX); x <= VIEW.maxX; x++) {
+    for (let y = 0; y < v.maxY; y++) {
+      const p = toScreen(v, x, y);
+      ctx.beginPath();
+      ctx.arc(p.sx, p.sy, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.restore();
 }
 
 /** 目標の高さの線 */
@@ -228,7 +254,7 @@ function drawWind(ctx: CanvasRenderingContext2D, v: Viewport, speed: number): vo
   ctx.fillStyle = 'rgba(46, 90, 160, 0.75)';
   ctx.lineWidth = 3;
   const left = toScreen(v, VIEW.minX + 0.5, 0).sx;
-  for (let y = 2; y < VIEW.maxY; y += 3) {
+  for (let y = 2; y < v.maxY; y += 3) {
     // 高い所ほど風が強い
     const len = Math.min(5, (speed / 10) * windHeightFactor(y)) * v.scale;
     const { sy } = toScreen(v, 0, y);
@@ -243,7 +269,7 @@ function drawWind(ctx: CanvasRenderingContext2D, v: Viewport, speed: number): vo
   ctx.restore();
 }
 
-const loadLabel = (l: { mass: number; name?: string }) => `${l.name ?? 'おもり'} ${l.mass}`;
+const loadLabel = (l: { mass: number; name?: string }) => l.name ?? `おもり ${l.mass}`;
 
 function memberWidth(v: Viewport): number {
   return Math.max(4, v.scale * 0.22);
@@ -262,6 +288,7 @@ export function drawDesign(
   pinMember: number | null = null,
 ): void {
   drawBackground(ctx, v, w, h, 0);
+  drawGridDots(ctx, v);
   drawGoalLine(ctx, v, w, goalHeight);
 
   ctx.lineCap = 'round';

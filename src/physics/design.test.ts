@@ -31,3 +31,30 @@ test('地面は揺れの前後では動かない', () => {
   expect(groundOffset(q, q.duration + 1)).toBe(0);
   expect(Math.abs(groundOffset(q, 5))).toBeGreaterThan(0);
 });
+
+test('長い柱を一度に引いても、途中の点で梁とつながる', () => {
+  const d = emptyDesign();
+  addMember(d, 0, 3, 4, 3, 'wood'); // 先に梁
+  addMember(d, 0, 0, 0, 6, 'wood'); // 6mの柱は高さ3mの点を通る
+  expect(d.members).toHaveLength(3);
+  expect(d.nodes).toHaveLength(4);
+  expect(designCost(d)).toBe(10);
+});
+
+test('既存の部材の途中に端を置くと、その部材も分かれてつながる', () => {
+  const d = emptyDesign();
+  addMember(d, 0, 0, 0, 6, 'steel'); // 先に6mの柱
+  addMember(d, 0, 3, 4, 3, 'wood'); // 梁の端が柱の途中
+  expect(d.members).toHaveLength(3);
+  expect(d.members.filter((m) => m.material === 'steel')).toHaveLength(2);
+  expect(designCost(d)).toBe(28);
+});
+
+test('長い部材で上からなぞると、途中で分かれた部材の材料がまとめて置き換わる', () => {
+  const d = emptyDesign();
+  addMember(d, 0, 0, 0, 3, 'concrete');
+  addMember(d, 0, 3, 0, 6, 'concrete');
+  addMember(d, 0, 0, 0, 6, 'steel');
+  expect(d.members).toHaveLength(2);
+  expect(d.members.every((m) => m.material === 'steel')).toBe(true);
+});
