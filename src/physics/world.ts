@@ -82,7 +82,35 @@ export interface World {
   firstBreak: FirstBreak | null;
   /** 重いもの（描画用） */
   loads: DesignLoad[];
+  /** 風（風の試験のとき） */
+  wind: Wind | null;
+  /** 免震：基礎全体が乗っている台の、地面からのずれ */
+  isolation: Isolation | null;
 }
+
+export interface Wind {
+  /** 平均の風速（m/s） */
+  speed: number;
+  /** 吹いている時間（秒） */
+  duration: number;
+}
+
+export interface Isolation {
+  /** 地面に対する台のずれ（m）と速さ */
+  u: number;
+  v: number;
+  mass: number;
+  stiffness: number;
+  damping: number;
+}
+
+/** 免震ゴムのかたさ・揺れの吸収（建物全体の重さに合わせて決める） */
+export const ISOLATION_PERIOD = 3.5;
+const ISOLATION_DAMPING_RATIO = 0.2;
+/** 風の強さの係数（ゲーム用） */
+const WIND_FACTOR = 0.012;
+/** 風を受ける面の奥行き（m） */
+const WIND_DEPTH = 4;
 
 function otherEnd(m: Member, node: number): number {
   return m.a === node ? m.b : m.a;
@@ -100,7 +128,7 @@ function wrap(a: number): number {
   return a;
 }
 
-export function createWorld(design: Design, quake: Quake | null = null): World {
+export function createWorld(design: Design, quake: Quake | null = null, wind: Wind | null = null): World {
   const nodes: Node[] = design.nodes.map((n) => ({
     x: n.x,
     y: n.y,
@@ -135,7 +163,7 @@ export function createWorld(design: Design, quake: Quake | null = null): World {
     const ma = nodes[m.a].support ? nodes[m.b].mass : nodes[m.a].mass;
     const mb = nodes[m.b].support ? nodes[m.a].mass : nodes[m.b].mass;
     const mEff = (ma * mb) / (ma + mb);
-    m.damping = 2 * AXIAL_DAMPING_RATIO * Math.sqrt(m.stiffness * mEff);
+    m.damping = 2 * (m.material.dampingRatio ?? AXIAL_DAMPING_RATIO) * Math.sqrt(m.stiffness * mEff);
   }
 
   const world: World = {
@@ -150,13 +178,24 @@ export function createWorld(design: Design, quake: Quake | null = null): World {
     collapseTime: null,
     firstBreak: null,
     loads: design.loads ?? [],
+    wind,
+    isolation: null,
   };
+
+  if (design.isolated) {
+    // 免震：建物全体の重さに合わせて、ゆっくり（約3.5秒）揺れるゴムにする
+    const total = nodes.reduce((s, n) => s + n.mass, 0);
+    const mass = Math.max(1, total * 0.15);
+    const w = (2 * Math.PI) / ISOLATION_PERIOD;
+    const k = (total + mass) * w * w;
+    world.isolation = { u: 0, v: 0, mass, stiffness: k, damping: 2 * ISOLATION_DAMPING_RATIO * Math.sqrt(k * (total + mass)) };
+  }
 
   // 接合部：各節点で、となり合う部材どうしを回転ばねでつなぐ
   nodes.forEach((_, ni) => {
     const attached = members
       .map((m, mi) => ({ m, mi }))
-      .filter(({ m }) => m.a === ni || m.b === ni)
+      .filter(({ m }) => (m.a === ni || m.b === ni) && !m.material.pinned)
       .map(({ m, mi }) => ({ mi, angle: angleOf(world, ni, otherEnd(m, ni)) }))
       .sort((p, q) => p.angle - q.angle);
     for (let k = 0; k + 1 < attached.length; k++) {
@@ -276,6 +315,35 @@ function applyJointForces(world: World, dt: number): void {
   }
 }
 
+/** 時刻 t の風速（m/s）。強弱をくり返す突風まじりの風 */
+export function windSpeed(w: Wind, t: number): number {
+  if (t < 0 || t > w.duration) return 0;
+  const ramp = Math.min(1, t / 3, (w.duration - t) / 2);
+  const gust = 1 + 0.25 * Math.sin((2 * Math.PI * t) / 3.1) + 0.15 * Math.sin((2 * Math.PI * t) / 1.3 + 1);
+  return w.speed * ramp * gust;
+}
+
+/**
+ * 風の力：高い所ほど風が強い。
+ * 横から見た図なので、風を受ける面の広さは「高さ」で決まり、建物の幅や柱の本数にはよらない。
+ * 各階の床（同じ高さのつなぎ目）に、上下の半分ずつの高さ分の力を等しく分けてかける。
+ */
+function applyWindForces(world: World, t: number): void {
+  if (!world.wind) return;
+  const v = windSpeed(world.wind, t);
+  if (v === 0) return;
+  const levels = [...new Set(world.nodes.filter((n) => !n.support).map((n) => n.baseY))].sort((a, b) => a - b);
+  levels.forEach((y, i) => {
+    const below = i === 0 ? 0 : levels[i - 1];
+    const above = i === levels.length - 1 ? y : levels[i + 1];
+    const tributary = (above - below) / 2;
+    const floor = world.nodes.filter((n) => !n.support && n.baseY === y);
+    const heightFactor = Math.pow(Math.max(y, 1) / 10, 0.4);
+    const f = (WIND_FACTOR * v * v * heightFactor * tributary * WIND_DEPTH) / floor.length;
+    for (const n of floor) n.fx += f;
+  });
+}
+
 /** 時間を dt 秒すすめる */
 export function step(world: World, dt: number): void {
   const h = dt / SUBSTEPS;
@@ -290,11 +358,26 @@ export function step(world: World, dt: number): void {
     }
     applyMemberForces(world);
     applyJointForces(world, h);
+    applyWindForces(world, t - SETTLE_TIME);
+
+    // 免震：基礎にかかる横の力で台が動き、ゴムが台を地面に引きもどす
+    const iso = world.isolation;
+    if (iso) {
+      let f = 0;
+      for (const n of world.nodes) if (n.support) f += n.fx;
+      // 台の位置は地面からのずれ u で表すので、地面の加速度の分だけ逆向きに力がかかる
+      const groundAcc = world.quake
+        ? (groundOffset(world.quake, t - SETTLE_TIME + h) - 2 * gx + groundOffset(world.quake, t - SETTLE_TIME - h)) / (h * h)
+        : 0;
+      const acc = (f - iso.stiffness * iso.u - iso.damping * iso.v) / iso.mass - groundAcc;
+      iso.v += acc * h;
+      iso.u += iso.v * h;
+    }
 
     for (const n of world.nodes) {
       if (n.support) {
-        // 基礎は地面と一緒に動く
-        const nx = n.baseX + gx;
+        // 基礎は地面と一緒に動く（免震なら、台のずれの分だけずれる）
+        const nx = n.baseX + gx + (iso ? iso.u : 0);
         n.vx = (nx - n.x) / h;
         n.vy = 0;
         n.x = nx;

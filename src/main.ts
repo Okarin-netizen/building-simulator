@@ -104,8 +104,13 @@ function openStage(s: Stage | null): void {
   $('samples').hidden = !!s;
   $('quake-choice').hidden = !!s;
   $('quake-fixed').textContent = s
-    ? `この依頼の地震：${QUAKE_LEVELS[s.quake.level].name}・${QUAKE_TYPES[s.quake.type].name}`
+    ? s.wind
+      ? `この依頼の試験：強い風（風速${s.wind}m/s、突風まじり）`
+      : `この依頼の地震：${QUAKE_LEVELS[s.quake.level].name}・${QUAKE_TYPES[s.quake.type].name}`
     : '';
+  $('test-title').textContent = s?.wind ? '風の試験' : '地震';
+  startBtn.textContent = s?.wind ? '強風スタート！' : '地震スタート！';
+  $('toggle-iso').hidden = !!s && !s.isolation;
   buildMaterialButtons();
   refreshPanel();
 }
@@ -121,7 +126,7 @@ function openMenu(): void {
   const progress = loadProgress();
   const list = $('menu-list');
   list.innerHTML = '';
-  for (const chapter of ['1', '2', 'challenge', '3', '4']) {
+  for (const chapter of ['1', '2', 'challenge', '3', '4', '5', '6']) {
     const h = document.createElement('h3');
     h.textContent = CHAPTER_NAMES[chapter];
     list.appendChild(h);
@@ -199,6 +204,15 @@ $('restart').addEventListener('click', () => {
 $('show-hint').addEventListener('click', () => {
   if (stage) hint.textContent = `ヒント：${stage.hint}`;
 });
+$('toggle-iso').addEventListener('click', () => {
+  if (phase !== 'build') return;
+  design.isolated = !design.isolated;
+  persist();
+  refreshPanel();
+  hint.textContent = design.isolated
+    ? '建物の下に免震ゴムを入れました（基礎1か所につき10万円）。'
+    : '免震ゴムを外しました。';
+});
 startBtn.addEventListener('click', startPredict);
 resetBtn.addEventListener('click', backToBuild);
 
@@ -214,6 +228,10 @@ function refreshPanel(): void {
   });
   for (const id of ['sample-square', 'sample-braced', 'clear', 'restart', 'show-hint']) $<HTMLButtonElement>(id).disabled = running;
   startBtn.disabled = running || design.members.length === 0;
+  const iso = $<HTMLButtonElement>('toggle-iso');
+  iso.disabled = running;
+  iso.classList.toggle('active', !!design.isolated);
+  iso.textContent = design.isolated ? '免震ゴムを外す' : '免震ゴムを入れる';
   resetBtn.disabled = !running;
   levelSelect.disabled = running;
   typeSelect.disabled = running;
@@ -276,12 +294,15 @@ function startQuake(): void {
   const quake = stage
     ? makeQuake(stage.quake.level, stage.quake.type)
     : makeQuake(levelSelect.value as QuakeLevel, typeSelect.value as QuakeType);
-  world = createWorld(design, quake);
+  const wind = stage?.wind ? { speed: stage.wind, duration: 15 } : null;
+  world = createWorld(design, wind ? null : quake, wind);
   frames = [captureFrame(world, 0)];
   phase = 'test';
   predictBox.hidden = true;
   resultBox.hidden = true;
-  hint.textContent = '地震が来ます…　赤くなる所が、こわれそうな所です。';
+  hint.textContent = wind
+    ? '強い風が吹きます…　赤くなる所が、こわれそうな所です。'
+    : '地震が来ます…　赤くなる所が、こわれそうな所です。';
   refreshPanel();
 }
 
@@ -785,7 +806,7 @@ function frame(now: number): void {
   if (world && phase === 'test') {
     step(world, (1 / 60) * (slowCheck.checked ? 0.25 : 1));
     frames.push(captureFrame(world, currentShift(world)));
-    const quakeEnd = SETTLE_TIME + (world.quake?.duration ?? 0) + 2;
+    const quakeEnd = SETTLE_TIME + (world.quake?.duration ?? world.wind?.duration ?? 0) + 2;
     if (world.time > quakeEnd || (world.collapsed && world.time > (world.collapseTime ?? 0) + 2.5)) showResult(world);
   }
   if (world && phase === 'replay') {

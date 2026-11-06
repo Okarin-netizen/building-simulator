@@ -1,7 +1,7 @@
 // 材料の性質（ゲーム用の値）。
 // 実物の大小関係（強さ・重さ・ねばり・価格）に合わせているが、数値そのものは遊びやすさで調整している。
 
-export type MaterialId = 'wood' | 'steel' | 'concrete';
+export type MaterialId = 'wood' | 'steel' | 'concrete' | 'damper';
 
 export interface Material {
   id: MaterialId;
@@ -19,6 +19,10 @@ export interface Material {
   /** 1mあたりの値段（万円） */
   costPerMeter: number;
   color: string;
+  /** 伸び縮みの揺れを吸収する強さ（ふつうの部材は 0.2） */
+  dampingRatio?: number;
+  /** 両端がピン（つなぎ目で角度を保たない）。制震ダンパー用 */
+  pinned?: boolean;
 }
 
 export const MATERIALS: Record<MaterialId, Material> = {
@@ -55,6 +59,20 @@ export const MATERIALS: Record<MaterialId, Material> = {
     costPerMeter: 2,
     color: '#a9a9a2',
   },
+  damper: {
+    id: 'damper',
+    name: '制震ダンパー',
+    // やわらかいが、伸び縮みするときに揺れのエネルギーを熱にして吸収する
+    axialStiffness: 0.8e5,
+    massPerMeter: 0.6,
+    breakStrain: 0.2,
+    jointStiffness: 0,
+    jointBreakAngle: 10,
+    costPerMeter: 3,
+    color: '#7a5cc4',
+    dampingRatio: 10,
+    pinned: true,
+  },
 };
 
-export const MATERIAL_IDS: MaterialId[] = ['wood', 'steel', 'concrete'];
+export const MATERIAL_IDS: MaterialId[] = ['wood', 'steel', 'concrete', 'damper'];
