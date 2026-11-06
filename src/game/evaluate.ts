@@ -12,10 +12,28 @@ export interface CanTest {
   reason?: string;
 }
 
+/** 地面につながっていない部材があるか（どこかの基礎まで部材をたどって行けない） */
+export function hasFloatingMember(design: Design): boolean {
+  const reach = design.nodes.map((n) => n.y <= 0);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const m of design.members) {
+      if (reach[m.a] !== reach[m.b]) {
+        reach[m.a] = reach[m.b] = true;
+        changed = true;
+      }
+    }
+  }
+  return design.members.some((m) => !reach[m.a]);
+}
+
 /** 地震の試験を始めてよいか（予算と基礎） */
 export function canStartTest(stage: Stage | null, design: Design): CanTest {
   if (design.members.length === 0) return { ok: false, reason: '部材を置いてから試験しよう。' };
   if (!design.nodes.some((n) => n.y <= 0)) return { ok: false, reason: '地面につながった部材がありません。いちばん下の線から柱を立てよう。' };
+  if (hasFloatingMember(design))
+    return { ok: false, reason: '地面につながっていない部材があります。宙に浮いた部材を消すか、柱でつなごう。' };
   if (stage?.load) {
     const load = design.loads?.[0];
     if (!load || !design.nodes.some((n) => n.y === load.y && n.y > 0))

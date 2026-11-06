@@ -482,11 +482,21 @@ function openSheet(): void {
     el.value = notes[el.dataset.note!] ?? '';
   });
   sheet.hidden = false;
+  fitAllTextareas();
 }
+
+/** 書いた分だけ欄を広げる（印刷したときに、はみ出た行が切れないように） */
+function fitTextarea(el: HTMLTextAreaElement): void {
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight + 2}px`;
+}
+const fitAllTextareas = () => sheet.querySelectorAll('textarea').forEach(fitTextarea);
+window.addEventListener('beforeprint', fitAllTextareas);
 
 sheet.addEventListener('input', (e) => {
   const el = e.target as HTMLInputElement | HTMLTextAreaElement;
   if (!el.dataset.note) return;
+  if (el instanceof HTMLTextAreaElement) fitTextarea(el);
   const notes = loadNotes();
   notes[el.dataset.note] = el.value;
   saveNotes(notes);
@@ -751,11 +761,17 @@ canvas.addEventListener('pointerup', () => {
       const over = stage && designCost(design) > stage.budget;
       hint.textContent = over
         ? '予算オーバーです。部材を減らすか、安い材料にしよう。'
-        : '部材を置きました。続けて置くか、「地震スタート！」で試験しよう。';
+        : `部材を置きました。続けて置くか、「${startBtn.textContent}」で試験しよう。`;
     } else if (dragStart.x !== dragEnd.x || dragStart.y !== dragEnd.y) {
       hint.textContent = `部材の長さは ${MAX_MEMBER_LENGTH} m までです。`;
     }
   }
+  dragStart = null;
+  dragEnd = null;
+});
+
+// タッチが途中で取り消されたら（画面の端に指が出た、など）、置きかけの部材を捨てる
+canvas.addEventListener('pointercancel', () => {
   dragStart = null;
   dragEnd = null;
 });
