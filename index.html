@@ -4,24 +4,35 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>最高タワー工房</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
     <header class="top">
       <div class="top-row">
         <h1>最高タワー工房</h1>
+        <span class="stage-no" id="stage-no"></span>
         <span class="stage-name" id="stage-name"></span>
-        <button type="button" id="open-menu" class="small">ステージ一覧</button>
+        <button type="button" id="open-menu" class="ghost">ステージ一覧</button>
       </div>
-      <p class="request" id="request"></p>
-      <p class="hint" id="hint"></p>
+      <div class="hazard" aria-hidden="true"></div>
     </header>
 
     <main class="layout">
       <aside class="panel" aria-label="道具">
+        <section class="order-card">
+          <h2>依頼書</h2>
+          <p id="request"></p>
+        </section>
+
         <section>
           <h2>材料</h2>
-          <div class="buttons" id="materials"></div>
+          <div class="materials" id="materials"></div>
         </section>
 
         <section>
@@ -48,6 +59,17 @@
           </div>
         </section>
 
+        <section class="stats">
+          <div class="stat">
+            <span class="stat-label">高さ</span>
+            <span class="stat-value"><strong id="stat-height">0</strong><small id="stat-goal"></small></span>
+          </div>
+          <div class="stat" id="cost-line">
+            <span class="stat-label">費用</span>
+            <span class="stat-value"><strong id="stat-cost">0</strong><small id="stat-budget"></small></span>
+          </div>
+        </section>
+
         <section>
           <h2>地震</h2>
           <p class="quake-fixed" id="quake-fixed"></p>
@@ -60,15 +82,10 @@
             </label>
           </div>
           <label class="check"><input type="checkbox" id="slow" /> スロー再生</label>
-          <div class="buttons">
-            <button type="button" id="start" class="primary">地震を起こす</button>
+          <div class="buttons quake-buttons">
+            <button type="button" id="start" class="go">地震スタート！</button>
             <button type="button" id="reset" disabled>建て直す</button>
           </div>
-        </section>
-
-        <section class="stats">
-          <div>高さ <strong id="stat-height">0</strong> m <span id="stat-goal"></span></div>
-          <div id="cost-line">費用 <strong id="stat-cost">0</strong> <span id="stat-budget"></span> 万円</div>
         </section>
 
         <section class="legend" aria-label="色の見方">
@@ -79,6 +96,7 @@
       </aside>
 
       <div class="stage">
+        <p class="hint" id="hint"></p>
         <canvas id="canvas"></canvas>
         <div class="result" id="result" hidden></div>
       </div>

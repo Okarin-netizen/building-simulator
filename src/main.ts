@@ -62,7 +62,8 @@ function openStage(s: Stage | null): void {
   menu.hidden = true;
   resultBox.hidden = true;
 
-  $('stage-name').textContent = s ? `${s.chapter === 'challenge' ? '' : s.id + ' '}${s.title}` : '自由に作る（実験モード）';
+  $('stage-no').textContent = s ? (s.chapter === 'challenge' ? 'チャレンジ' : s.id) : '実験';
+  $('stage-name').textContent = s ? s.title : '自由に作る';
   $('request').textContent = s ? s.request : '好きな形・材料で建てて、地震の強さや揺れ方を変えて試してみよう。';
   hint.textContent = '点から点へドラッグして部材を置こう。地面の線につながった所が基礎になります。';
   $('stage-tools').hidden = !s;
@@ -127,7 +128,7 @@ function buildMaterialButtons(): void {
     const b = document.createElement('button');
     b.type = 'button';
     b.dataset.material = id;
-    b.innerHTML = `<span class="swatch" style="background:${m.color}"></span>${m.name}<br><small>${m.costPerMeter}万円/m</small>`;
+    b.innerHTML = `<span class="swatch" style="background:${m.color}"></span>${m.name}<span class="price">${m.costPerMeter}万円/m</span>`;
     b.addEventListener('click', () => {
       material = id;
       refreshPanel();
@@ -186,9 +187,9 @@ function refreshPanel(): void {
   const height = designHeight(design);
   const cost = designCost(design);
   $('stat-height').textContent = String(height);
-  $('stat-goal').textContent = stage && stage.goalHeight > 0 ? `（目標 ${stage.goalHeight} m）` : '';
+  $('stat-goal').textContent = stage && stage.goalHeight > 0 ? ` / ${stage.goalHeight}m` : ' m';
   $('stat-cost').textContent = String(cost);
-  $('stat-budget').textContent = stage ? `/ 予算 ${stage.budget}` : '';
+  $('stat-budget').textContent = stage ? ` / ${stage.budget}万円` : ' 万円';
   $('cost-line').classList.toggle('over', !!stage && cost > stage.budget);
 }
 
@@ -234,8 +235,7 @@ function showResult(w: World): void {
       ? '倒れてしまった…'
       : `高さが足りません（目標 ${goalHeight()} m）`;
 
-  let html = `<h3>${title}</h3>`;
-  if (stage) html += `<div class="stars">${starText(ev.stars)}</div>`;
+  let html = `<div class="result-head"><h3>${title}</h3>${stage ? `<span class="stars">${starText(ev.stars)}</span>` : ''}</div>`;
   html += `<ul>${ev.checks.map((c) => `<li class="${c.ok ? 'ok' : ''}">${escapeHtml(c.label)}</li>`).join('')}</ul>`;
   if (stage && ev.cleared) html += `<div class="lesson"><strong>なぜ？</strong>${escapeHtml(stage.lesson)}</div>`;
   else if (w.collapsed) html += `<div class="lesson"><strong>見直そう</strong>×印のつなぎ目や、消えた部材が最初にこわれた所です。${stage ? escapeHtml(stage.hint) : ''}</div>`;
