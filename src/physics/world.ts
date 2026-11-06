@@ -62,6 +62,11 @@ export interface Joint {
   lastAngle: number;
 }
 
+/** いちばん最初にこわれた所 */
+export type FirstBreak =
+  | { kind: 'member'; index: number; time: number }
+  | { kind: 'joint'; node: number; time: number };
+
 export interface World {
   nodes: Node[];
   members: Member[];
@@ -74,6 +79,7 @@ export interface World {
   collapsed: boolean;
   /** 倒れた時刻（秒） */
   collapseTime: number | null;
+  firstBreak: FirstBreak | null;
 }
 
 function otherEnd(m: Member, node: number): number {
@@ -134,6 +140,7 @@ export function createWorld(design: Design, quake: Quake | null = null): World {
     maxDrift: 0,
     collapsed: false,
     collapseTime: null,
+    firstBreak: null,
   };
 
   // 接合部：各節点で、となり合う部材どうしを回転ばねでつなぐ
@@ -196,6 +203,7 @@ function applyMemberForces(world: World): void {
     m.strain = (len - m.rest) / m.rest;
     if (Math.abs(m.strain) > m.material.breakStrain) {
       m.broken = true;
+      world.firstBreak ??= { kind: 'member', index: world.members.indexOf(m), time: world.time };
       continue;
     }
     const relV = (b.vx - a.vx) * ux + (b.vy - a.vy) * uy;
@@ -230,6 +238,7 @@ function applyJointForces(world: World, dt: number): void {
     j.ratio = Math.abs(bend) / j.breakAngle;
     if (j.ratio > 1) {
       j.broken = true;
+      world.firstBreak ??= { kind: 'joint', node: j.node, time: world.time };
       continue;
     }
     const angVel = wrap(angle - j.lastAngle) / dt;

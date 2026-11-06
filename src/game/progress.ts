@@ -55,3 +55,49 @@ export function loadDesign(id: string): Design | null {
 export function saveDesign(id: string, design: Design): void {
   write(DESIGN_KEY(id), design);
 }
+
+// ---------- 試験の記録（ふりかえりシート用） ----------
+
+const ATTEMPTS_KEY = 'saikou-tower-attempts-v1';
+const NOTES_KEY = 'saikou-tower-notes-v1';
+const MAX_ATTEMPTS = 60;
+
+export interface Attempt {
+  /** 試験した時刻（ISO 形式） */
+  at: string;
+  stageId: string;
+  stageTitle: string;
+  cleared: boolean;
+  stars: number;
+  height: number;
+  cost: number;
+  predicted: string;
+  actual: string;
+  verdict: 'hit' | 'near' | 'miss';
+}
+
+export function loadAttempts(): Attempt[] {
+  const list = read<Attempt[]>(ATTEMPTS_KEY);
+  return Array.isArray(list) ? list : [];
+}
+
+export function logAttempt(a: Attempt): Attempt[] {
+  const list = [...loadAttempts(), a].slice(-MAX_ATTEMPTS);
+  write(ATTEMPTS_KEY, list);
+  return list;
+}
+
+export function clearAttempts(): void {
+  write(ATTEMPTS_KEY, []);
+}
+
+/** ふりかえりシートの書きこみ（名前・答え） */
+export type Notes = Record<string, string>;
+
+export function loadNotes(): Notes {
+  return read<Notes>(NOTES_KEY) ?? {};
+}
+
+export function saveNotes(notes: Notes): void {
+  write(NOTES_KEY, notes);
+}

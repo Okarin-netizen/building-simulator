@@ -5,7 +5,19 @@ import { MATERIALS, MATERIAL_IDS, type MaterialId } from './physics/materials';
 import { groundOffset, makeQuake, QUAKE_LEVELS, QUAKE_TYPES, type QuakeLevel, type QuakeType } from './physics/quake';
 import { createWorld, SETTLE_TIME, step, type World } from './physics/world';
 import { canStartTest, evaluate } from './game/evaluate';
-import { loadDesign, loadProgress, recordResult, saveDesign } from './game/progress';
+import { judgePrediction, describeMember, type Prediction } from './game/predict';
+import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
+import {
+  clearAttempts,
+  loadAttempts,
+  loadDesign,
+  loadNotes,
+  loadProgress,
+  logAttempt,
+  recordResult,
+  saveDesign,
+  saveNotes,
+} from './game/progress';
 import { CHAPTER_NAMES, nextStage, stageById, STAGES, type Stage } from './game/stages';
 import { drawDesign, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toWorld, VIEW, type Viewport } from './render';
 
@@ -24,14 +36,27 @@ const typeSelect = $<HTMLSelectElement>('quake-type');
 const slowCheck = $<HTMLInputElement>('slow');
 const menu = $<HTMLDivElement>('menu');
 const materialBox = $<HTMLDivElement>('materials');
+const predictBox = $<HTMLDivElement>('predict-box');
+const predictGo = $<HTMLButtonElement>('predict-go');
+const replayBar = $<HTMLDivElement>('replay-bar');
+const replaySeek = $<HTMLInputElement>('replay-seek');
+const replayPlay = $<HTMLButtonElement>('replay-play');
+const replaySpeed = $<HTMLSelectElement>('replay-speed');
+const sheet = $<HTMLDivElement>('sheet');
 
 /** null のときは「自由に作る」モード */
 let stage: Stage | null = null;
 let design: Design = emptyDesign();
 let material: MaterialId = 'wood';
 let tool: 'place' | 'erase' = 'place';
+/** build：組み立て / predict：予想 / test：試験中 / result：結果 / replay：再生 */
+type Phase = 'build' | 'predict' | 'test' | 'result' | 'replay';
+let phase: Phase = 'build';
 let world: World | null = null;
-let finished = false;
+let prediction: Prediction | null = null;
+let frames: Frame[] = [];
+let replayTime = 0;
+let replayPlaying = false;
 let viewport: Viewport = makeViewport(1, 1);
 let cssWidth = 1;
 let cssHeight = 1;
@@ -49,8 +74,7 @@ const starText = (n: number) => '★'.repeat(n) + `<span class="off">${'★'.rep
 // ---------- ステージの切り替え ----------
 
 function openStage(s: Stage | null): void {
-  world = null;
-  finished = false;
+  resetTest();
   stage = s;
   design = loadDesign(designId()) ?? (s ? s.initial() : frameDesign({ floors: 3 }));
   if (!allowedMaterials().includes(material)) material = allowedMaterials()[0];
@@ -60,7 +84,6 @@ function openStage(s: Stage | null): void {
     // 何もしない
   }
   menu.hidden = true;
-  resultBox.hidden = true;
 
   $('stage-no').textContent = s ? (s.chapter === 'challenge' ? 'チャレンジ' : s.id) : '実験';
   $('stage-name').textContent = s ? s.title : '自由に作る';
@@ -83,7 +106,7 @@ function persist(): void {
 // ---------- ステージ一覧 ----------
 
 function openMenu(): void {
-  if (world && !finished) return;
+  if (phase === 'test') return;
   const progress = loadProgress();
   const list = $('menu-list');
   list.innerHTML = '';
@@ -150,7 +173,7 @@ document.querySelectorAll<HTMLButtonElement>('.tool').forEach((b) =>
 );
 
 function setDesign(d: Design): void {
-  if (world) return;
+  if (phase !== 'build') return;
   design = d;
   persist();
   refreshPanel();
@@ -165,11 +188,11 @@ $('restart').addEventListener('click', () => {
 $('show-hint').addEventListener('click', () => {
   if (stage) hint.textContent = `ヒント：${stage.hint}`;
 });
-startBtn.addEventListener('click', startQuake);
+startBtn.addEventListener('click', startPredict);
 resetBtn.addEventListener('click', backToBuild);
 
 function refreshPanel(): void {
-  const running = world !== null;
+  const running = phase !== 'build';
   materialBox.querySelectorAll<HTMLButtonElement>('button').forEach((b) => {
     b.classList.toggle('active', b.dataset.material === material);
     b.disabled = running;
@@ -193,37 +216,102 @@ function refreshPanel(): void {
   $('cost-line').classList.toggle('over', !!stage && cost > stage.budget);
 }
 
-// ---------- 地震の試験 ----------
+// ---------- 予想 ----------
 
-function startQuake(): void {
+function startPredict(): void {
+  if (phase !== 'build') return;
   const can = canStartTest(stage, design);
   if (!can.ok) {
     hint.textContent = can.reason!;
     return;
   }
+  phase = 'predict';
+  prediction = null;
+  updatePredictBox();
+  predictBox.hidden = false;
+  hint.textContent = '';
+  refreshPanel();
+}
+
+function updatePredictBox(): void {
+  $('predict-text').textContent =
+    prediction === null
+      ? 'いちばん先にこわれそうな部材をタップしてください。'
+      : prediction.kind === 'none'
+        ? 'わたしの予想：どこもこわれない'
+        : `わたしの予想：${describeMember(design, prediction.index)}`;
+  predictGo.disabled = prediction === null;
+  $('predict-none').classList.toggle('active', prediction?.kind === 'none');
+}
+
+$('predict-none').addEventListener('click', () => {
+  prediction = { kind: 'none' };
+  updatePredictBox();
+});
+$('predict-cancel').addEventListener('click', () => {
+  if (phase !== 'predict') return;
+  phase = 'build';
+  prediction = null;
+  predictBox.hidden = true;
+  hint.textContent = '組み立てにもどりました。';
+  refreshPanel();
+});
+predictGo.addEventListener('click', startQuake);
+
+// ---------- 地震の試験 ----------
+
+function startQuake(): void {
+  if (phase !== 'predict' || prediction === null) return;
   const quake = stage
     ? makeQuake(stage.quake.level, stage.quake.type)
     : makeQuake(levelSelect.value as QuakeLevel, typeSelect.value as QuakeType);
   world = createWorld(design, quake);
-  finished = false;
+  frames = [captureFrame(world, 0)];
+  phase = 'test';
+  predictBox.hidden = true;
   resultBox.hidden = true;
   hint.textContent = '地震が来ます…　赤くなる所が、こわれそうな所です。';
   refreshPanel();
 }
 
-function backToBuild(): void {
+/** 試験の状態をすべて片付ける */
+function resetTest(): void {
+  phase = 'build';
   world = null;
-  finished = false;
+  prediction = null;
+  frames = [];
+  replayPlaying = false;
   resultBox.hidden = true;
+  predictBox.hidden = true;
+  replayBar.hidden = true;
+}
+
+function backToBuild(): void {
+  resetTest();
   hint.textContent = 'どこを直せば強くなるか考えて、作り直してみよう。';
   refreshPanel();
 }
 
+const VERDICT_LABEL = { hit: '大当たり', near: 'おしい', miss: 'はずれ' } as const;
+
 function showResult(w: World): void {
-  finished = true;
+  phase = 'result';
   const ev = evaluate(stage, design, w);
+  const judge = judgePrediction(design, prediction ?? { kind: 'none' }, w.firstBreak);
   const isChallenge = stage?.chapter === 'challenge';
   if (stage) recordResult(stage.id, ev.stars, isChallenge && ev.cleared ? ev.height : undefined);
+  logAttempt({
+    at: new Date().toISOString(),
+    stageId: designId(),
+    stageTitle: stage ? `${stage.chapter === 'challenge' ? 'チャレンジ' : stage.id} ${stage.title}` : '自由に作る',
+    cleared: ev.cleared,
+    stars: stage ? ev.stars : 0,
+    height: ev.height,
+    cost: designCost(design),
+    predicted: judge.predicted,
+    actual: judge.actual,
+    verdict: judge.verdict,
+  });
 
   const title = ev.cleared
     ? isChallenge
@@ -237,9 +325,10 @@ function showResult(w: World): void {
 
   let html = `<div class="result-head"><h3>${title}</h3>${stage ? `<span class="stars">${starText(ev.stars)}</span>` : ''}</div>`;
   html += `<ul>${ev.checks.map((c) => `<li class="${c.ok ? 'ok' : ''}">${escapeHtml(c.label)}</li>`).join('')}</ul>`;
+  html += `<div class="answer ${judge.verdict}"><span class="verdict">${VERDICT_LABEL[judge.verdict]}</span><div><strong>予想の答え合わせ</strong><br>${escapeHtml(judge.message)}<br><small>予想：${escapeHtml(judge.predicted)}　／　結果：${escapeHtml(judge.actual)}</small></div></div>`;
   if (stage && ev.cleared) html += `<div class="lesson"><strong>なぜ？</strong>${escapeHtml(stage.lesson)}</div>`;
-  else if (w.collapsed) html += `<div class="lesson"><strong>見直そう</strong>×印のつなぎ目や、消えた部材が最初にこわれた所です。${stage ? escapeHtml(stage.hint) : ''}</div>`;
-  html += `<div class="buttons"><button type="button" data-act="rebuild">建て直す</button>`;
+  else if (w.collapsed) html += `<div class="lesson"><strong>見直そう</strong>スロー再生で、最初にこわれた所（黄色の輪）を確かめよう。${stage ? escapeHtml(stage.hint) : ''}</div>`;
+  html += `<div class="buttons"><button type="button" data-act="replay">スロー再生で見る</button><button type="button" data-act="rebuild">建て直す</button>`;
   const next = stage && ev.cleared ? nextStage(stage.id) : undefined;
   if (next) html += `<button type="button" class="primary" data-act="next">次のステージへ</button>`;
   if (stage && ev.cleared && !next) html += `<button type="button" class="primary" data-act="menu">ステージ一覧へ</button>`;
@@ -248,11 +337,126 @@ function showResult(w: World): void {
   resultBox.innerHTML = html;
   resultBox.className = `result ${ev.cleared ? 'ok' : 'fail'}`;
   resultBox.hidden = false;
+  resultBox.querySelector('[data-act=replay]')?.addEventListener('click', startReplay);
   resultBox.querySelector('[data-act=rebuild]')?.addEventListener('click', backToBuild);
   resultBox.querySelector('[data-act=next]')?.addEventListener('click', () => next && openStage(next));
   resultBox.querySelector('[data-act=menu]')?.addEventListener('click', openMenu);
-  hint.textContent = '「建て直す」で組み立てに戻れます。';
+  hint.textContent = '「スロー再生で見る」で、こわれた瞬間をもう一度見られます。';
 }
+
+// ---------- スロー再生 ----------
+
+const replayStart = () => frames[0]?.time ?? 0;
+const replayEnd = () => frames[frames.length - 1]?.time ?? 0;
+
+/** 最初にこわれた少し前から再生する */
+function breakReplayTime(): number {
+  const fb = world?.firstBreak;
+  return fb ? Math.max(replayStart(), fb.time - 1.5) : Math.max(replayStart(), SETTLE_TIME);
+}
+
+function startReplay(): void {
+  if (phase !== 'result' || !world || frames.length < 2) return;
+  phase = 'replay';
+  resultBox.hidden = true;
+  replayBar.hidden = false;
+  $<HTMLButtonElement>('replay-break').disabled = !world.firstBreak;
+  replayTime = breakReplayTime();
+  replayPlaying = true;
+  updateReplayBar();
+  hint.textContent = world.firstBreak ? '黄色の輪が、最初にこわれた所です。' : 'どこもこわれませんでした。揺れ方をよく見てみよう。';
+}
+
+function closeReplay(): void {
+  if (phase !== 'replay' || !world) return;
+  replayPlaying = false;
+  applyFrame(world, frames[frames.length - 1]);
+  phase = 'result';
+  replayBar.hidden = true;
+  resultBox.hidden = false;
+  hint.textContent = '';
+}
+
+function updateReplayBar(): void {
+  const span = replayEnd() - replayStart() || 1;
+  replaySeek.value = String(Math.round(((replayTime - replayStart()) / span) * 1000));
+  replayPlay.textContent = replayPlaying ? '一時停止' : '再生';
+  $('replay-time').textContent = `${Math.max(0, replayTime - SETTLE_TIME).toFixed(1)}秒`;
+}
+
+replayPlay.addEventListener('click', () => {
+  if (replayTime >= replayEnd()) replayTime = replayStart();
+  replayPlaying = !replayPlaying;
+  updateReplayBar();
+});
+replaySeek.addEventListener('input', () => {
+  replayTime = replayStart() + (Number(replaySeek.value) / 1000) * (replayEnd() - replayStart());
+  replayPlaying = false;
+  updateReplayBar();
+});
+$('replay-break').addEventListener('click', () => {
+  replayTime = breakReplayTime();
+  replayPlaying = true;
+  updateReplayBar();
+});
+$('replay-close').addEventListener('click', closeReplay);
+
+// ---------- ふりかえりシート ----------
+
+const QUESTIONS = [
+  { id: 'q1', text: '予想と結果をくらべて、気づいたことは？' },
+  { id: 'q2', text: '三角形（筋交い）を入れると強くなるのは、なぜだと思う？' },
+  { id: 'q3', text: '材料はどうやって選んだ？（強さ・重さ・費用のどれを大事にした？）' },
+  { id: 'q4', text: '班のみんなの作品で、よいと思った工夫は？' },
+];
+
+function openSheet(): void {
+  if (phase === 'test') return;
+  const notes = loadNotes();
+  const attempts = loadAttempts();
+  const box = $('sheet-attempts');
+  if (attempts.length === 0) {
+    box.innerHTML = '<p class="sheet-empty">まだ試験の記録がありません。</p>';
+  } else {
+    const rows = attempts
+      .map((a) => {
+        const d = new Date(a.at);
+        const time = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+        const result = a.cleared ? (a.stars > 0 ? `${'★'.repeat(a.stars)}` : '耐えた') : '×';
+        return `<tr><td>${time}</td><td>${escapeHtml(a.stageTitle)}</td><td>${a.height}m / ${a.cost}万円</td><td>${escapeHtml(a.predicted)}</td><td>${escapeHtml(a.actual)}</td><td class="v-${a.verdict}">${VERDICT_LABEL[a.verdict]}</td><td>${result}</td></tr>`;
+      })
+      .join('');
+    box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>時刻</th><th>ステージ</th><th>高さ・費用</th><th>予想</th><th>最初にこわれた所</th><th>答え合わせ</th><th>結果</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+  const qs = $('sheet-questions');
+  qs.innerHTML = QUESTIONS.map(
+    (q, i) => `<label class="question">${i + 1}. ${q.text}<textarea rows="3" data-note="${q.id}"></textarea></label>`,
+  ).join('');
+  sheet.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-note]').forEach((el) => {
+    el.value = notes[el.dataset.note!] ?? '';
+  });
+  sheet.hidden = false;
+}
+
+sheet.addEventListener('input', (e) => {
+  const el = e.target as HTMLInputElement | HTMLTextAreaElement;
+  if (!el.dataset.note) return;
+  const notes = loadNotes();
+  notes[el.dataset.note] = el.value;
+  saveNotes(notes);
+});
+$('open-sheet').addEventListener('click', openSheet);
+$('sheet-close').addEventListener('click', () => (sheet.hidden = true));
+$('sheet-print').addEventListener('click', () => window.print());
+$('sheet-clear').addEventListener('click', () => {
+  if (!confirm('試験の記録と書いたことを全部消しますか？')) return;
+  clearAttempts();
+  saveNotes({});
+  openSheet();
+});
+sheet.addEventListener('click', (e) => {
+  if (e.target === sheet) sheet.hidden = true;
+});
 
 // ---------- 入力 ----------
 
@@ -293,7 +497,15 @@ const lengthOk = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.hypot(b.x - a.x, b.y - a.y) <= MAX_MEMBER_LENGTH && (a.x !== b.x || a.y !== b.y);
 
 canvas.addEventListener('pointerdown', (e) => {
-  if (world) return;
+  if (phase === 'predict') {
+    const i = memberAt(eventPoint(e));
+    if (i !== null) {
+      prediction = { kind: 'member', index: i };
+      updatePredictBox();
+    }
+    return;
+  }
+  if (phase !== 'build') return;
   canvas.setPointerCapture(e.pointerId);
   const p = eventPoint(e);
   if (tool === 'erase') {
@@ -310,9 +522,9 @@ canvas.addEventListener('pointerdown', (e) => {
 });
 
 canvas.addEventListener('pointermove', (e) => {
-  if (world) return;
+  if (phase !== 'build' && phase !== 'predict') return;
   const p = eventPoint(e);
-  hoverMember = tool === 'erase' ? memberAt(p) : null;
+  hoverMember = tool === 'erase' || phase === 'predict' ? memberAt(p) : null;
   if (dragStart) dragEnd = snap(p);
 });
 
@@ -325,7 +537,7 @@ canvas.addEventListener('pointerup', () => {
       const over = stage && designCost(design) > stage.budget;
       hint.textContent = over
         ? '予算オーバーです。部材を減らすか、安い材料にしよう。'
-        : '部材を置きました。続けて置くか、「地震を起こす」で試験しよう。';
+        : '部材を置きました。続けて置くか、「地震スタート！」で試験しよう。';
     } else if (dragStart.x !== dragEnd.x || dragStart.y !== dragEnd.y) {
       hint.textContent = `部材の長さは ${MAX_MEMBER_LENGTH} m までです。`;
     }
@@ -353,23 +565,48 @@ function resize(): void {
 // ヘッダーの文字数が変わると画面の高さも変わるので、キャンバスの大きさの変化を見張る
 new ResizeObserver(resize).observe(canvas);
 
-function frame(): void {
-  if (world) {
-    if (!finished) {
-      step(world, (1 / 60) * (slowCheck.checked ? 0.25 : 1));
-      const quakeEnd = SETTLE_TIME + (world.quake?.duration ?? 0) + 2;
-      if (world.time > quakeEnd || (world.collapsed && world.time > (world.collapseTime ?? 0) + 2.5)) showResult(world);
+let lastFrameAt = performance.now();
+
+function frame(now: number): void {
+  const dt = Math.min(0.1, (now - lastFrameAt) / 1000);
+  lastFrameAt = now;
+  if (world && phase === 'test') {
+    step(world, (1 / 60) * (slowCheck.checked ? 0.25 : 1));
+    frames.push(captureFrame(world, currentShift(world)));
+    const quakeEnd = SETTLE_TIME + (world.quake?.duration ?? 0) + 2;
+    if (world.time > quakeEnd || (world.collapsed && world.time > (world.collapseTime ?? 0) + 2.5)) showResult(world);
+  }
+  if (world && phase === 'replay') {
+    if (replayPlaying) {
+      replayTime += dt * Number(replaySpeed.value);
+      if (replayTime >= replayEnd()) {
+        replayTime = replayEnd();
+        replayPlaying = false;
+      }
+      updateReplayBar();
     }
-    const shift = world.quake ? groundOffset(world.quake, world.time - SETTLE_TIME) : 0;
-    drawWorld(ctx, viewport, cssWidth, cssHeight, world, shift, goalHeight());
+    applyFrame(world, frames[frameIndexAt(frames, replayTime)]);
+  }
+  if (world && phase !== 'build' && phase !== 'predict') {
+    const shift = phase === 'replay' ? frames[frameIndexAt(frames, replayTime)].groundShift : currentShift(world);
+    drawWorld(ctx, viewport, cssWidth, cssHeight, world, shift, goalHeight(), {
+      predictMember: prediction?.kind === 'member' ? prediction.index : null,
+      firstBreak: phase === 'test' ? null : world.firstBreak,
+      pulse: (Math.sin(now / 150) + 1) / 2,
+    });
   } else {
     const preview =
-      dragStart && dragEnd
+      phase === 'build' && dragStart && dragEnd
         ? { x1: dragStart.x, y1: dragStart.y, x2: dragEnd.x, y2: dragEnd.y, color: MATERIALS[material].color, ok: lengthOk(dragStart, dragEnd) }
         : null;
-    drawDesign(ctx, viewport, cssWidth, cssHeight, design, preview, hoverMember, goalHeight());
+    const pin = phase === 'predict' && prediction?.kind === 'member' ? prediction.index : null;
+    drawDesign(ctx, viewport, cssWidth, cssHeight, design, preview, hoverMember, goalHeight(), pin);
   }
   requestAnimationFrame(frame);
+}
+
+function currentShift(w: World): number {
+  return w.quake ? groundOffset(w.quake, w.time - SETTLE_TIME) : 0;
 }
 
 resize();
