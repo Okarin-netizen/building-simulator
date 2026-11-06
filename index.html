@@ -21,6 +21,7 @@
         <div class="top-actions">
           <button type="button" id="open-sheet" class="ghost">ふりかえり</button>
           <button type="button" id="open-menu" class="ghost">ステージ一覧</button>
+          <button type="button" id="open-about" class="ghost">このアプリについて</button>
         </div>
       </div>
       <div class="hazard" aria-hidden="true"></div>
@@ -139,6 +140,27 @@
           <button type="button" id="open-class">先生用：クラスランキングの設定</button>
         </div>
         <p class="class-status" id="class-status"></p>
+        <p class="credit">作者：技術科　岡田</p>
+      </div>
+    </div>
+
+    <div class="menu" id="about-dialog" hidden>
+      <div class="menu-card about-card">
+        <h2>このアプリについて</h2>
+        <p class="about-lead">最高タワー工房 <span id="about-version"></span><br />作者：<b id="about-author"></b></p>
+        <h3>更新履歴</h3>
+        <div id="about-changelog"></div>
+        <h3>ライセンス</h3>
+        <p class="note" id="about-license"></p>
+        <details class="about-text">
+          <summary>ライセンスの全文（英語）</summary>
+          <pre id="about-license-text"></pre>
+        </details>
+        <h3>使っているもの</h3>
+        <ul class="about-libs" id="about-libs"></ul>
+        <div class="buttons sheet-actions">
+          <button type="button" id="about-close">閉じる</button>
+        </div>
       </div>
     </div>
 

@@ -856,3 +856,76 @@ canvas {
     border-top: 3px solid var(--ink);
   }
 }
+
+/* ---------- このアプリについて ---------- */
+
+.credit {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--quiet);
+  text-align: right;
+}
+
+.about-card {
+  width: min(720px, 100%);
+}
+
+.about-lead {
+  margin: 0 0 4px;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.change {
+  border-left: 4px solid var(--yellow);
+  padding: 2px 0 2px 10px;
+  margin-bottom: 8px;
+}
+
+.change-head {
+  margin: 0;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.change-head small {
+  color: var(--quiet);
+  font-weight: 500;
+}
+
+.change-ver {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--ink);
+  color: #fff;
+  font-size: 12px;
+}
+
+.change ul,
+.about-libs {
+  margin: 4px 0 0;
+  padding-left: 1.3em;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.lib-license {
+  color: var(--quiet);
+  font-size: 12px;
+}
+
+.about-text summary {
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.about-text pre {
+  white-space: pre-wrap;
+  font-size: 11px;
+  line-height: 1.5;
+  background: var(--yellow-soft);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+}
