@@ -8,8 +8,16 @@ describe('このアプリについて', () => {
   });
 
   it('更新履歴は新しい順で、最新の版が package.json と同じ', () => {
-    const nums = CHANGELOG.map((c) => Number(c.version));
-    expect([...nums].sort((a, b) => b - a)).toEqual(nums);
+    // 0.10 は 0.9 より新しいので、数字として比べずに「.」で区切った番号ごとに比べる
+    const cmp = (a: string, b: string) => {
+      const x = a.split('.').map(Number);
+      const y = b.split('.').map(Number);
+      for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
+      return 0;
+    };
+    const versions = CHANGELOG.map((c) => c.version);
+    expect([...versions].sort((a, b) => cmp(b, a))).toEqual(versions);
+    expect(cmp('0.10', '0.9')).toBeGreaterThan(0);
     expect(pkg.version.startsWith(`${CHANGELOG[0].version}.`)).toBe(true);
     for (const c of CHANGELOG) expect(c.items.length).toBeGreaterThan(0);
   });

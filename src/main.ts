@@ -6,7 +6,7 @@ import { groundOffset, makeQuake, QUAKE_LEVELS, QUAKE_TYPES, TEST_DURATION, type
 import { createWorld, SETTLE_TIME, step, type World } from './physics/world';
 import { distanceToSegment } from './physics/geometry';
 import { canStartTest, evaluate } from './game/evaluate';
-import { judgePrediction, describeMember, type Prediction } from './game/predict';
+import { breakAdvice, judgePrediction, describeMember, type Prediction } from './game/predict';
 import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
 import { buildSubmitUrl, classLinkFor, parseFormTemplate, readClassLink, validateTemplate, type FormTemplate } from './game/classForm';
 import {
@@ -27,7 +27,7 @@ import {
 } from './game/progress';
 import { APP_LICENSE, AUTHOR, CHANGELOG, MIT_TEXT, THIRD_PARTY } from './game/about';
 import { CHAPTER_NAMES, nextStage, stageById, stageFullTitle, stageLabel, STAGES, type Stage } from './game/stages';
-import { drawDesign, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, type Viewport } from './render';
+import { drawDesign, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
 
 const FREE_ID = 'free';
 
@@ -67,6 +67,11 @@ let replayPlaying = false;
 /** いちばん最近の試験結果（クラスに送る用） */
 let lastResult: { stage: string; height: number; stars: number; cost: number; result: string } | null = null;
 let viewport: Viewport = makeViewport(1, 1);
+/** 画面に映す高さ（m）。ステージに合わせて拡大する */
+let viewMaxY: number = VIEW.maxY;
+/** 「1つ戻す」用の、変更前の設計図 */
+let undoStack: string[] = [];
+const UNDO_LIMIT = 50;
 let cssWidth = 1;
 let cssHeight = 1;
 
@@ -93,6 +98,8 @@ function openStage(s: Stage | null): void {
   resetTest();
   stage = s;
   design = loadDesign(designId()) ?? (s ? s.initial() : frameDesign({ floors: 3 }));
+  undoStack = [];
+  fitView();
   if (!allowedMaterials().includes(material)) material = allowedMaterials()[0];
   saveLastStage(designId());
   menu.hidden = true;
@@ -104,7 +111,7 @@ function openStage(s: Stage | null): void {
   if (!s?.load && tool === 'load') tool = 'place';
   $('stage-name').textContent = s ? s.title : '自由に作る';
   $('request').textContent = s ? s.request : '好きな形・材料で建てて、地震の強さや揺れ方を変えて試してみよう。';
-  hint.textContent = '点から点へドラッグして部材を置こう。地面の線につながった所が基礎になります。';
+  hint.textContent = '点から点へドラッグして部材を置こう。地面の線につながった所が基礎（きそ）になります。';
   $('stage-tools').hidden = !s;
   $('samples').hidden = !!s;
   $('quake-choice').hidden = !!s;
@@ -118,6 +125,34 @@ function openStage(s: Stage | null): void {
   $('toggle-iso').hidden = !!s && !s.isolation;
   buildMaterialButtons();
   refreshPanel();
+}
+
+/** 画面に映す高さを、ステージの目標と建物の高さに合わせる */
+function fitView(): void {
+  const next = stage ? viewHeightFor(stage.goalHeight, designHeight(design)) : VIEW.maxY;
+  if (next !== viewMaxY) {
+    viewMaxY = next;
+    resize();
+  }
+}
+
+/** 設計図を変える前に呼ぶ（「1つ戻す」で戻れるように） */
+function remember(): void {
+  undoStack.push(JSON.stringify(design));
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+}
+
+function undo(): void {
+  if (phase !== 'build') return;
+  const prev = undoStack.pop();
+  if (!prev) {
+    hint.textContent = 'これ以上は戻せません。';
+    return;
+  }
+  design = JSON.parse(prev);
+  persist();
+  refreshPanel();
+  hint.textContent = '1つ前に戻しました。';
 }
 
 function persist(): void {
@@ -170,7 +205,13 @@ function buildMaterialButtons(): void {
     const b = document.createElement('button');
     b.type = 'button';
     b.dataset.material = id;
-    b.innerHTML = `<span class="swatch" style="background:${m.color}"></span>${m.name}<span class="price">${m.costPerMeter}万円/m</span>`;
+    const t = m.traits;
+    const dots = (n: number) => '★'.repeat(n) + `<span class="off">${'★'.repeat(3 - n)}</span>`;
+    const traits =
+      'note' in t
+        ? `<span class="traits">${escapeHtml(t.note)}</span>`
+        : `<span class="traits">強さ${dots(t.strength)} 重さ${dots(t.weight)} ねばり${dots(t.toughness)}</span>`;
+    b.innerHTML = `<span class="mat-top"><span class="swatch" style="background:${m.color}"></span>${m.name}<span class="price">${m.costPerMeter}万円/m</span></span>${traits}`;
     b.addEventListener('click', () => {
       material = id;
       refreshPanel();
@@ -188,11 +229,14 @@ document.querySelectorAll<HTMLButtonElement>('.tool').forEach((b) =>
   b.addEventListener('click', () => {
     tool = b.dataset.tool as typeof tool;
     refreshPanel();
+    if (tool === 'erase') hint.textContent = '消したい部材をタップしよう。置くときは「部材を置く」にもどしてね。';
+    if (tool === 'place') hint.textContent = '点から点へドラッグして部材を置こう。';
   }),
 );
 
 function setDesign(d: Design): void {
   if (phase !== 'build') return;
+  remember();
   design = d;
   persist();
   refreshPanel();
@@ -209,6 +253,7 @@ $('show-hint').addEventListener('click', () => {
 });
 $('toggle-iso').addEventListener('click', () => {
   if (phase !== 'build') return;
+  remember();
   design.isolated = !design.isolated;
   persist();
   refreshPanel();
@@ -217,6 +262,7 @@ $('toggle-iso').addEventListener('click', () => {
     : '免震ゴムを外しました。';
 });
 startBtn.addEventListener('click', startPredict);
+$('undo').addEventListener('click', undo);
 resetBtn.addEventListener('click', backToBuild);
 
 function refreshPanel(): void {
@@ -229,15 +275,18 @@ function refreshPanel(): void {
     b.classList.toggle('active', b.dataset.tool === tool);
     b.disabled = running;
   });
-  for (const id of ['sample-square', 'sample-braced', 'clear', 'restart', 'show-hint']) $<HTMLButtonElement>(id).disabled = running;
+  for (const id of ['sample-square', 'sample-braced', 'clear', 'restart', 'show-hint', 'undo']) $<HTMLButtonElement>(id).disabled = running;
   startBtn.disabled = running || design.members.length === 0;
   const iso = $<HTMLButtonElement>('toggle-iso');
   iso.disabled = running;
   iso.classList.toggle('active', !!design.isolated);
   iso.textContent = design.isolated ? '免震ゴムを外す' : '免震ゴムを入れる';
+  // 試験の前は「地震スタート！」、試験のあとは「組み立てにもどる」だけを出す
+  startBtn.hidden = running;
+  resetBtn.hidden = !running;
   resetBtn.disabled = !running;
   // 試験中は開けないので、押せないことが見て分かるようにする
-  for (const id of ['open-menu', 'open-sheet']) $<HTMLButtonElement>(id).disabled = phase === 'test';
+  for (const id of ['open-menu', 'open-sheet', 'open-howto']) $<HTMLButtonElement>(id).disabled = phase === 'test';
   levelSelect.disabled = running;
   typeSelect.disabled = running;
 
@@ -360,7 +409,7 @@ function showResult(w: World): void {
         height: ev.cleared ? ev.height : 0,
         stars: ev.stars,
         cost,
-        result: ev.cleared ? 'クリア' : w.collapsed ? '倒れた' : '高さが足りない',
+        result: ev.cleared ? 'クリア' : ev.fell === 'collapsed' ? '倒れた' : ev.fell === 'partly' ? '一部がくずれた' : '高さが足りない',
       }
     : null;
 
@@ -370,20 +419,29 @@ function showResult(w: World): void {
       : stage
         ? 'クリア！'
         : '耐えた！'
-    : w.collapsed
+    : ev.fell === 'collapsed'
       ? '倒れてしまった…'
-      : `高さが足りません（目標 ${goalHeight()} m）`;
+      : ev.fell === 'partly'
+        ? '一部がくずれた…'
+        : `高さが足りません（目標 ${goalHeight()} m）`;
 
   let html = `<div class="result-head"><h3>${title}</h3>${stage ? `<span class="stars">${starText(ev.stars)}</span>` : ''}</div>`;
   html += `<ul>${ev.checks.map((c) => `<li class="${c.ok ? 'ok' : ''}">${escapeHtml(c.label)}</li>`).join('')}</ul>`;
   html += `<div class="answer ${judge.verdict}"><span class="verdict">${VERDICT_LABEL[judge.verdict]}</span><div><strong>予想の答え合わせ</strong><br>${escapeHtml(judge.message)}<br><small>予想：${escapeHtml(judge.predicted)}　／　結果：${escapeHtml(judge.actual)}</small></div></div>`;
   if (stage && ev.cleared) html += `<div class="lesson"><strong>なぜ？</strong>${escapeHtml(stage.lesson)}</div>`;
-  else if (w.collapsed) html += `<div class="lesson"><strong>見直そう</strong>スロー再生で、最初にこわれた所（黄色の輪）を確かめよう。${stage ? escapeHtml(stage.hint) : ''}</div>`;
+  else if (ev.fell !== 'none') {
+    const advice = breakAdvice(design, w.firstBreak);
+    const partly = ev.fell === 'partly' ? '建物の一部が折れて、元の高さから落ちました。くずれた所がある建物は「倒れなかった」になりません。' : '';
+    html += `<div class="lesson"><strong>見直そう</strong>${partly}スロー再生で、最初にこわれた所（黄色の輪）を確かめよう。${advice ? escapeHtml(advice) : stage ? escapeHtml(stage.hint) : ''}</div>`;
+  }
   const canSend = lastResult !== null && classForm() !== null;
-  html += `<div class="buttons">${canSend ? '<button type="button" data-act="send">クラスに送る</button>' : ''}<button type="button" data-act="replay">スロー再生で見る</button><button type="button" data-act="rebuild">建て直す</button>`;
-  const next = stage && ev.cleared ? nextStage(stage.id) : undefined;
+  html += `<div class="buttons">${canSend ? '<button type="button" data-act="send">クラスに送る</button>' : ''}<button type="button" data-act="replay">スロー再生で見る</button>`;
+  // チャレンジでは、次の章（発展）へ進まず、同じタワーを改良するのを主なボタンにする
+  if (isChallenge) html += `<button type="button" class="primary" data-act="rebuild">もっと高くする</button>`;
+  else html += `<button type="button" data-act="rebuild">組み立てにもどる</button>`;
+  const next = stage && ev.cleared && !isChallenge ? nextStage(stage.id) : undefined;
   if (next) html += `<button type="button" class="primary" data-act="next">次のステージへ</button>`;
-  if (stage && ev.cleared && !next) html += `<button type="button" class="primary" data-act="menu">ステージ一覧へ</button>`;
+  if (stage && ev.cleared && !next && !isChallenge) html += `<button type="button" class="primary" data-act="menu">ステージ一覧へ</button>`;
   html += `</div>`;
 
   resultBox.innerHTML = html;
@@ -395,7 +453,10 @@ function showResult(w: World): void {
   resultBox.querySelector('[data-act=rebuild]')?.addEventListener('click', backToBuild);
   resultBox.querySelector('[data-act=next]')?.addEventListener('click', () => next && openStage(next));
   resultBox.querySelector('[data-act=menu]')?.addEventListener('click', openMenu);
-  hint.textContent = '「スロー再生で見る」で、こわれた瞬間をもう一度見られます。';
+  hint.textContent = w.firstBreak
+    ? '「スロー再生で見る」で、こわれた瞬間をもう一度見られます。'
+    : '「スロー再生で見る」で、揺れ方をもう一度見られます。';
+  refreshPanel();
 }
 
 /** 結果カードを、建物に重ならない側（右か左）に置く。どちらにも入らなければ、すき間の広い側 */
@@ -733,6 +794,30 @@ function showFallbackLink(box: HTMLElement, url: string): void {
   box.hidden = false;
 }
 
+// ---------- 遊び方 ----------
+
+const howtoDialog = $<HTMLDivElement>('howto-dialog');
+/** はじめて開いたときは、遊び方を閉じたらステージ一覧を出す */
+let menuAfterHowto = false;
+
+function openHowto(first = false): void {
+  if (phase === 'test') return;
+  menuAfterHowto = first;
+  howtoDialog.hidden = false;
+}
+
+function closeHowto(): void {
+  howtoDialog.hidden = true;
+  if (menuAfterHowto) openMenu();
+  menuAfterHowto = false;
+}
+
+$('open-howto').addEventListener('click', () => openHowto());
+$('howto-close').addEventListener('click', closeHowto);
+howtoDialog.addEventListener('click', (e) => {
+  if (e.target === howtoDialog) closeHowto();
+});
+
 /** クラスリンクから開いたときは、先生のフォームの設定を読みこむ */
 function loadClassLinkFromUrl(): void {
   const t = readClassLink(location.hash);
@@ -751,13 +836,14 @@ function eventPoint(e: PointerEvent): { x: number; y: number } {
 function snap(p: { x: number; y: number }): { x: number; y: number } {
   return {
     x: Math.max(Math.ceil(VIEW.minX), Math.min(Math.floor(VIEW.maxX), Math.round(p.x))),
-    y: Math.max(0, Math.min(VIEW.maxY - 1, Math.round(p.y))),
+    y: Math.max(0, Math.min(viewport.maxY - 1, Math.round(p.y))),
   };
 }
 
 function memberAt(p: { x: number; y: number }): number | null {
   let best: number | null = null;
-  let bestD = 0.45;
+  // 指でもタップしやすいよう、画面で 14px 以内なら当たりにする
+  let bestD = Math.max(0.45, 14 / viewport.scale);
   design.members.forEach((m, i) => {
     const d = distanceToSegment(p, design.nodes[m.a], design.nodes[m.b]);
     if (d < bestD) {
@@ -790,12 +876,17 @@ canvas.addEventListener('pointerdown', (e) => {
   if (tool === 'erase') {
     const i = memberAt(p);
     if (i !== null) {
+      remember();
       const hadLoad = (design.loads?.length ?? 0) > 0;
       removeMember(design, i);
       persist();
       refreshPanel();
-      if (hadLoad && !design.loads?.length && stage?.load)
-        hint.textContent = `床がなくなったので、${stage.load.name}を外しました。「${stage.load.name}を置く」で置き直そう。`;
+      hint.textContent =
+        hadLoad && !design.loads?.length && stage?.load
+          ? `床がなくなったので、${stage.load.name}を外しました。「${stage.load.name}を置く」で置き直そう。`
+          : '部材を消しました。置くときは「部材を置く」にもどしてね。';
+    } else {
+      hint.textContent = 'いまは「部材を消す」になっています。部材を置くときは「部材を置く」を選ぼう。';
     }
     return;
   }
@@ -813,9 +904,11 @@ canvas.addEventListener('pointermove', (e) => {
 canvas.addEventListener('pointerup', () => {
   if (dragStart && dragEnd) {
     if (lengthOk(dragStart, dragEnd)) {
+      remember();
       addMember(design, dragStart.x, dragStart.y, dragEnd.x, dragEnd.y, material);
       persist();
       refreshPanel();
+      fitView();
       const over = stage && designCost(design) > stage.budget;
       hint.textContent = over
         ? '予算オーバーです。部材を減らすか、安い材料にしよう。'
@@ -844,10 +937,13 @@ function placeLoad(y: number): void {
   const levels = [...new Set(design.nodes.filter((n) => n.y > 0).map((n) => n.y))];
   if (levels.length === 0) return;
   const best = levels.reduce((a, b) => (Math.abs(b - y) < Math.abs(a - y) ? b : a));
+  remember();
   design.loads = [{ y: best, mass: stage.load.mass, name: stage.load.name }];
   persist();
   refreshPanel();
-  hint.textContent = `高さ${best}mの床に${stage.load.name}を置きました。ほかの階に動かすには、その床をタップしよう。`;
+  const where =
+    best >= designHeight(design) ? `屋上（高さ${best}m）` : best % 3 === 0 ? `${best / 3 + 1}階の床（高さ${best}m）` : `高さ${best}mの床`;
+  hint.textContent = `${where}に${stage.load.name}を置きました。ほかの階に動かすには、その床をタップしよう。`;
 }
 
 // ---------- 描画ループ ----------
@@ -860,7 +956,7 @@ function resize(): void {
   canvas.width = Math.round(rect.width * dpr);
   canvas.height = Math.round(rect.height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  viewport = makeViewport(cssWidth, cssHeight);
+  viewport = makeViewport(cssWidth, cssHeight, viewMaxY);
 }
 // ヘッダーの文字数が変わると画面の高さも変わるので、キャンバスの大きさの変化を見張る
 new ResizeObserver(resize).observe(canvas);
@@ -871,7 +967,13 @@ const SIM_STEP = 1 / 60;
 /** まだ計算していない、たまった時間（秒） */
 let simLag = 0;
 
+const legend = $<HTMLDivElement>('legend');
+
+const stageBox = document.querySelector<HTMLDivElement>('.stage')!;
+
 function frame(now: number): void {
+  legend.hidden = phase !== 'test' && phase !== 'replay';
+  stageBox.classList.toggle('replaying', phase === 'replay');
   const dt = Math.min(0.1, (now - lastFrameAt) / 1000);
   lastFrameAt = now;
   if (world && phase === 'test') {
@@ -925,5 +1027,5 @@ refreshClassStatus();
 const lastId = loadLastStage();
 if (lastId === FREE_ID) openStage(null);
 else openStage(stageById(lastId ?? '') ?? STAGES[0]);
-if (!lastId) openMenu();
+if (!lastId) openHowto(true);
 requestAnimationFrame(frame);

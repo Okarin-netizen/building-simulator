@@ -19,6 +19,7 @@
         <span class="stage-no" id="stage-no"></span>
         <span class="stage-name" id="stage-name"></span>
         <div class="top-actions">
+          <button type="button" id="open-howto" class="ghost">遊び方</button>
           <button type="button" id="open-sheet" class="ghost">ふりかえり</button>
           <button type="button" id="open-menu" class="ghost">ステージ一覧</button>
           <button type="button" id="open-about" class="ghost">このアプリについて</button>
@@ -44,6 +45,7 @@
           <div class="buttons">
             <button type="button" class="tool active" data-tool="place">部材を置く</button>
             <button type="button" class="tool" data-tool="erase">部材を消す</button>
+            <button type="button" id="undo">1つ戻す</button>
             <button type="button" class="tool" data-tool="load" id="tool-load" hidden>機械を置く</button>
             <button type="button" id="toggle-iso" hidden>免震ゴムを入れる</button>
           </div>
@@ -65,16 +67,6 @@
           </div>
         </section>
 
-        <section class="stats">
-          <div class="stat">
-            <span class="stat-label">高さ</span>
-            <span class="stat-value"><strong id="stat-height">0</strong><small id="stat-goal"></small></span>
-          </div>
-          <div class="stat" id="cost-line">
-            <span class="stat-label">費用</span>
-            <span class="stat-value"><strong id="stat-cost">0</strong><small id="stat-budget"></small></span>
-          </div>
-        </section>
 
         <section>
           <h2 id="test-title">地震</h2>
@@ -87,22 +79,34 @@
               <select id="quake-type"></select>
             </label>
           </div>
-          <label class="check"><input type="checkbox" id="slow" /> スロー再生</label>
-          <div class="buttons quake-buttons">
-            <button type="button" id="start" class="go">地震スタート！</button>
-            <button type="button" id="reset" disabled>建て直す</button>
-          </div>
+          <label class="check"><input type="checkbox" id="slow" /> ゆっくり試験する（1/4の速さ）</label>
         </section>
 
-        <section class="legend" aria-label="色の見方">
-          <h2>色の見方（地震中）</h2>
-          <div class="scale"><span>余裕</span><span class="bar"></span><span>こわれそう</span></div>
-          <p>丸はつなぎ目。赤い丸は曲がりすぎて危ないつなぎ目、×はこわれたつなぎ目です。</p>
-        </section>
+        <!-- 試験のボタンは、パネルをスクロールしなくても見えるよう下に固定する -->
+        <div class="panel-go">
+          <section class="stats">
+            <div class="stat">
+              <span class="stat-label">高さ</span>
+              <span class="stat-value"><strong id="stat-height">0</strong><small id="stat-goal"></small></span>
+            </div>
+            <div class="stat" id="cost-line">
+              <span class="stat-label">費用</span>
+              <span class="stat-value"><strong id="stat-cost">0</strong><small id="stat-budget"></small></span>
+            </div>
+          </section>
+          <div class="buttons quake-buttons">
+            <button type="button" id="start" class="go">地震スタート！</button>
+            <button type="button" id="reset" class="primary back" hidden>組み立てにもどる</button>
+          </div>
+        </div>
       </aside>
 
       <div class="stage">
-        <p class="hint" id="hint"></p>
+        <p class="hint" id="hint" aria-live="polite"></p>
+        <div class="legend-box" id="legend" aria-label="色の見方" hidden>
+          <div class="scale"><span>余裕</span><span class="bar"></span><span>こわれそう</span></div>
+          <p>丸はつなぎ目。赤い丸は曲がりすぎて危ない所、×はこわれた所。</p>
+        </div>
         <canvas id="canvas"></canvas>
         <div class="predict-box" id="predict-box" hidden>
           <h3>試験の前に予想しよう</h3>
@@ -142,6 +146,29 @@
         </div>
         <p class="class-status" id="class-status"></p>
         <p class="credit">作者：技術科　岡田</p>
+      </div>
+    </div>
+
+    <div class="menu" id="howto-dialog" hidden>
+      <div class="menu-card howto-card">
+        <h2>遊び方</h2>
+        <ol class="howto-steps">
+          <li><b>依頼書を読む</b>　左上の依頼書に、目標の高さ・予算・地震の強さが書いてあります。</li>
+          <li><b>部材を置く</b>　方眼の<b>点から点へドラッグ</b>すると部材（ぶざい）が置けます。地面の線につながった所が基礎（きそ）です。まちがえたら「1つ戻す」か「部材を消す」。</li>
+          <li><b>地震スタート！</b>　押したら、いちばん先にこわれそうな部材をタップして<b>予想</b>してから試験します。</li>
+          <li><b>結果を見て直す</b>　「スロー再生で見る」で、最初にこわれた所（黄色の輪）を確かめて、作り直そう。星3つを目指そう。</li>
+        </ol>
+        <h3>ことば</h3>
+        <dl class="glossary">
+          <dt>柱（はしら）</dt><dd>たての部材</dd>
+          <dt>梁（はり）</dt><dd>横の部材。上の階の床になる</dd>
+          <dt>筋交い（すじかい）</dt><dd>四角の角から角へ入れる、ななめの部材</dd>
+          <dt>基礎（きそ）</dt><dd>地面とのつなぎ目</dd>
+          <dt>揺れ幅（ゆれはば）</dt><dd>いちばん上が、地面にくらべて横にずれた大きさ</dd>
+        </dl>
+        <div class="buttons sheet-actions">
+          <button type="button" id="howto-close" class="primary">はじめる</button>
+        </div>
       </div>
     </div>
 

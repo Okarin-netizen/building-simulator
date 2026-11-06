@@ -49,23 +49,41 @@ export interface Evaluation {
   stars: number; // 0〜3
   height: number;
   checks: { label: string; ok: boolean }[];
+  /** none：くずれなかった / collapsed：倒れた / partly：一部がくずれ落ちた */
+  fell: 'none' | 'collapsed' | 'partly';
+}
+
+/** 試験のあと、元の高さからこれ以上下がったつなぎ目があれば「くずれた」とみなす（m） */
+export const FALL_TOLERANCE = 0.5;
+
+/**
+ * 建物の一部がくずれたか。てっぺんに立てた棒が折れて垂れ下がった場合などは、
+ * 全体の高さは残っていても「倒れなかった」とは言えないので、ここで見つける。
+ */
+export function partlyFell(world: World): boolean {
+  return world.nodes.some((n) => !n.support && n.baseY > 0 && n.y < n.baseY - FALL_TOLERANCE);
 }
 
 export function evaluate(stage: Stage | null, design: Design, world: World): Evaluation {
   const height = designHeight(design);
   const broken = brokenCount(world);
   const reachedGoal = !stage || height >= stage.goalHeight;
-  const stood = !world.collapsed;
-  const cleared = reachedGoal && stood;
+  const fell: Evaluation['fell'] = world.collapsed ? 'collapsed' : partlyFell(world) ? 'partly' : 'none';
+  const cleared = reachedGoal && fell === 'none';
   const noDamage = broken.members === 0 && broken.joints === 0;
-  const smallDrift = world.maxDrift <= Math.max(height, 1) * DRIFT_LIMIT_RATIO;
+  const ratio = stage?.driftLimit ?? DRIFT_LIMIT_RATIO;
+  const smallDrift = world.maxDrift <= Math.max(height, 1) * ratio;
   const driftCm = Math.round(world.maxDrift * 100);
-  const limitCm = Math.round(Math.max(height, 1) * DRIFT_LIMIT_RATIO * 100);
+  const limitCm = Math.round(Math.max(height, 1) * ratio * 100);
+  const percent = Math.round(ratio * 1000) / 10;
 
   const checks = [
     { label: stage && stage.goalHeight > 0 ? `高さ${stage.goalHeight}m以上で、倒れなかった` : '倒れなかった', ok: cleared },
     { label: 'こわれた部材・つなぎ目が0', ok: cleared && noDamage },
-    { label: `いちばん上の揺れ幅が${limitCm}cm以下（${driftCm}cm）`, ok: cleared && smallDrift },
+    {
+      label: `いちばん上の揺れ幅が${limitCm}cm以下（高さの${percent}%）${fell === 'none' ? `：${driftCm}cm` : ''}`,
+      ok: cleared && smallDrift,
+    },
   ];
-  return { cleared, stars: checks.filter((c) => c.ok).length, height, checks };
+  return { cleared, stars: checks.filter((c) => c.ok).length, height, checks, fell };
 }

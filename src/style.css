@@ -201,11 +201,34 @@ button.go:active:not(:disabled) {
 
 .materials button {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
   min-height: 46px;
   border-color: var(--line);
   font-size: 15px;
+  text-align: left;
+}
+
+.materials .mat-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.materials .traits {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--quiet);
+  letter-spacing: 0.5px;
+}
+
+.materials .traits .off {
+  color: var(--line);
+}
+
+.materials button.active .traits {
+  color: var(--ink);
 }
 
 .materials button.active {
@@ -260,6 +283,7 @@ button.go:active:not(:disabled) {
   font-size: 13px;
   font-weight: 700;
   margin-left: 2px;
+  white-space: nowrap;
 }
 
 .stat.over {
@@ -300,12 +324,6 @@ label.check {
   display: none;
 }
 
-.legend p {
-  font-size: 12px;
-  color: var(--quiet);
-  margin: 6px 0 0;
-}
-
 .scale {
   display: flex;
   align-items: center;
@@ -335,17 +353,94 @@ canvas {
   touch-action: none;
 }
 
+.panel-go {
+  /* パネルをスクロールしても、試験のボタンはいつも見えるようにする */
+  position: sticky;
+  bottom: -14px;
+  margin: auto -16px -14px;
+  padding: 10px 16px 12px;
+  background: var(--panel);
+  border-top: 2px solid var(--line);
+  z-index: 1;
+}
+
+.panel-go .stats {
+  margin-bottom: 8px;
+}
+
+.panel-go .stat {
+  padding: 4px 10px;
+}
+
+.panel-go .stat-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+.panel-go .stat-value strong {
+  font-size: 21px;
+}
+
+.panel-go button.go {
+  margin-bottom: 5px;
+}
+
+.panel-go button.back {
+  flex: 1 1 100%;
+  min-height: 56px;
+  font-size: 16px;
+}
+
+.panel-go button[hidden] {
+  display: none;
+}
+
 .hint {
   position: absolute;
-  left: 16px;
-  bottom: 14px;
-  right: 16px;
+  left: 52px;
+  top: 12px;
+  /* 右上の結果カード・予想の札と重ならない幅にする */
+  max-width: max(280px, calc(100% - 540px));
   margin: 0;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(31, 31, 31, 0.88);
   pointer-events: none;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
+  line-height: 1.6;
   color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.hint:empty {
+  display: none;
+}
+
+.stage.replaying .hint {
+  top: 96px;
+}
+
+.legend-box {
+  position: absolute;
+  right: 16px;
+  bottom: 44px;
+  width: 260px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+.legend-box[hidden] {
+  display: none;
+}
+
+.legend-box p {
+  font-size: 12px;
+  color: var(--quiet);
+  margin: 4px 0 0;
 }
 
 /* ---------- 結果カード ---------- */
@@ -413,7 +508,10 @@ canvas {
 }
 
 .result li::before {
-  content: '○ ';
+  /* 学校では○が「正解」なので、できなかった項目は×にする */
+  content: '× ';
+  color: #b3261e;
+  font-weight: 700;
 }
 
 .result li.ok {
@@ -936,4 +1034,37 @@ canvas {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 8px;
+}
+
+/* ---------- 遊び方 ---------- */
+
+.howto-card {
+  max-width: 640px;
+}
+
+.howto-steps {
+  margin: 0 0 8px;
+  padding-left: 1.4em;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.howto-steps li {
+  margin-bottom: 6px;
+}
+
+.glossary {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.glossary dt {
+  font-weight: 700;
+}
+
+.glossary dd {
+  margin: 0;
 }

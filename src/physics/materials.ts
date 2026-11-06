@@ -23,6 +23,8 @@ export interface Material {
   dampingRatio?: number;
   /** 両端がピン（つなぎ目で角度を保たない）。制震ダンパー用 */
   pinned?: boolean;
+  /** 材料ボタンに出す特徴（生徒向け。1〜3 の目安） */
+  traits: { strength: number; weight: number; toughness: number } | { note: string };
 }
 
 export const MATERIALS: Record<MaterialId, Material> = {
@@ -36,6 +38,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
     jointBreakAngle: 0.06,
     costPerMeter: 1,
     color: '#c58b4c',
+    traits: { strength: 1, weight: 1, toughness: 2 },
   },
   steel: {
     id: 'steel',
@@ -46,7 +49,8 @@ export const MATERIALS: Record<MaterialId, Material> = {
     jointStiffness: 5000,
     jointBreakAngle: 0.15,
     costPerMeter: 4,
-    color: '#6f7f91',
+    color: '#3d4a5c',
+    traits: { strength: 3, weight: 2, toughness: 3 },
   },
   concrete: {
     id: 'concrete',
@@ -57,7 +61,8 @@ export const MATERIALS: Record<MaterialId, Material> = {
     jointStiffness: 6000,
     jointBreakAngle: 0.04,
     costPerMeter: 2,
-    color: '#a9a9a2',
+    color: '#b9b6ac',
+    traits: { strength: 2, weight: 3, toughness: 1 },
   },
   damper: {
     id: 'damper',
@@ -70,6 +75,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
     jointBreakAngle: 10,
     costPerMeter: 3,
     color: '#7a5cc4',
+    traits: { note: '揺れを吸収する（やわらかい）' },
     dampingRatio: 10,
     pinned: true,
   },
