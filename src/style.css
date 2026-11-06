@@ -220,3 +220,173 @@ canvas {
     border-top: 1px solid var(--line);
   }
 }
+
+/* ---------- フェーズ2：ステージ ---------- */
+
+.top-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.stage-name {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.top-row .small {
+  margin-left: auto;
+  min-height: 34px;
+  padding: 4px 10px;
+}
+
+.request {
+  margin: 4px 0 0;
+  font-size: 15px;
+}
+
+.request:empty {
+  display: none;
+}
+
+.quake-fixed {
+  font-size: 14px;
+  margin: 0 0 6px;
+}
+
+.quake-fixed:empty {
+  display: none;
+}
+
+.over {
+  color: #c62f22;
+}
+
+.result {
+  width: min(520px, 92%);
+}
+
+.result h3 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.result .stars {
+  font-size: 30px;
+  letter-spacing: 4px;
+  color: #e3a412;
+  margin: 2px 0;
+}
+
+.result .stars .off {
+  color: #d9d4c7;
+}
+
+.result ul {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0;
+  text-align: left;
+  font-size: 14px;
+  font-weight: normal;
+}
+
+.result li::before {
+  content: '○ ';
+  color: #9aa1aa;
+}
+
+.result li.ok::before {
+  content: '✓ ';
+  color: #2e9d55;
+  font-weight: 700;
+}
+
+.result .lesson {
+  text-align: left;
+  font-size: 14px;
+  font-weight: normal;
+  background: #f4f8ff;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 8px 0;
+  line-height: 1.6;
+}
+
+.result .lesson strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.result .buttons {
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.menu {
+  position: fixed;
+  inset: 0;
+  background: rgba(30, 34, 40, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 10;
+}
+
+.menu[hidden] {
+  display: none;
+}
+
+.menu-card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 16px 20px;
+  width: min(640px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+}
+
+.menu-card h2 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.menu-card h3 {
+  font-size: 15px;
+  margin: 12px 0 6px;
+  color: var(--quiet);
+}
+
+.stage-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+}
+
+.stage-card {
+  text-align: left;
+  min-height: 64px;
+}
+
+.stage-card .no {
+  font-size: 12px;
+  color: var(--quiet);
+}
+
+.stage-card .card-stars {
+  display: block;
+  color: #e3a412;
+  font-size: 15px;
+}
+
+.stage-card .card-stars .off {
+  color: #d9d4c7;
+}
+
+.menu-free {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}

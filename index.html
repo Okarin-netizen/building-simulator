@@ -3,13 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>最高タワー工房（試作）</title>
+    <title>最高タワー工房</title>
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
     <header class="top">
-      <h1>最高タワー工房 <small>試作版</small></h1>
-      <p class="hint" id="hint">点から点へドラッグして部材を置こう。地面（いちばん下の線）につながった所が基礎になります。</p>
+      <div class="top-row">
+        <h1>最高タワー工房</h1>
+        <span class="stage-name" id="stage-name"></span>
+        <button type="button" id="open-menu" class="small">ステージ一覧</button>
+      </div>
+      <p class="request" id="request"></p>
+      <p class="hint" id="hint"></p>
     </header>
 
     <main class="layout">
@@ -27,7 +32,14 @@
           </div>
         </section>
 
-        <section>
+        <section id="stage-tools">
+          <div class="buttons">
+            <button type="button" id="show-hint">ヒント</button>
+            <button type="button" id="restart">最初に戻す</button>
+          </div>
+        </section>
+
+        <section id="samples">
           <h2>見本</h2>
           <div class="buttons">
             <button type="button" id="sample-square">四角い枠</button>
@@ -38,12 +50,15 @@
 
         <section>
           <h2>地震</h2>
-          <label>強さ
-            <select id="quake-level"></select>
-          </label>
-          <label>揺れ方
-            <select id="quake-type"></select>
-          </label>
+          <p class="quake-fixed" id="quake-fixed"></p>
+          <div id="quake-choice">
+            <label>強さ
+              <select id="quake-level"></select>
+            </label>
+            <label>揺れ方
+              <select id="quake-type"></select>
+            </label>
+          </div>
           <label class="check"><input type="checkbox" id="slow" /> スロー再生</label>
           <div class="buttons">
             <button type="button" id="start" class="primary">地震を起こす</button>
@@ -52,14 +67,14 @@
         </section>
 
         <section class="stats">
-          <div>高さ <strong id="stat-height">0</strong> m</div>
-          <div>費用 <strong id="stat-cost">0</strong> 万円</div>
+          <div>高さ <strong id="stat-height">0</strong> m <span id="stat-goal"></span></div>
+          <div id="cost-line">費用 <strong id="stat-cost">0</strong> <span id="stat-budget"></span> 万円</div>
         </section>
 
         <section class="legend" aria-label="色の見方">
           <h2>色の見方（地震中）</h2>
           <div class="scale"><span>余裕</span><span class="bar"></span><span>こわれそう</span></div>
-          <p>丸はつなぎ目。赤い丸は曲がりすぎて危ないつなぎ目です。</p>
+          <p>丸はつなぎ目。赤い丸は曲がりすぎて危ないつなぎ目、×はこわれたつなぎ目です。</p>
         </section>
       </aside>
 
@@ -68,6 +83,16 @@
         <div class="result" id="result" hidden></div>
       </div>
     </main>
+
+    <div class="menu" id="menu" hidden>
+      <div class="menu-card">
+        <h2>ステージを選ぼう</h2>
+        <div id="menu-list"></div>
+        <div class="menu-free">
+          <button type="button" id="free-mode">自由に作る（実験モード）</button>
+        </div>
+      </div>
+    </div>
 
     <script type="module" src="./src/main.ts"></script>
   </body>

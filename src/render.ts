@@ -89,6 +89,26 @@ function drawBackground(ctx: CanvasRenderingContext2D, v: Viewport, w: number, h
   }
 }
 
+/** 目標の高さの線 */
+function drawGoalLine(ctx: CanvasRenderingContext2D, v: Viewport, w: number, goalHeight: number): void {
+  if (goalHeight <= 0) return;
+  const { sy } = toScreen(v, 0, goalHeight);
+  ctx.save();
+  ctx.strokeStyle = '#2e9d55';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 6]);
+  ctx.beginPath();
+  ctx.moveTo(0, sy);
+  ctx.lineTo(w, sy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#2e7d4a';
+  ctx.font = 'bold 14px system-ui';
+  ctx.textAlign = 'right';
+  ctx.fillText(`目標 ${goalHeight}m`, w - 8, sy - 6);
+  ctx.restore();
+}
+
 function drawNodeDot(ctx: CanvasRenderingContext2D, sx: number, sy: number, fill: string, stroke: string, r = 5): void {
   ctx.beginPath();
   ctx.arc(sx, sy, r, 0, Math.PI * 2);
@@ -112,8 +132,10 @@ export function drawDesign(
   design: Design,
   preview: { x1: number; y1: number; x2: number; y2: number; color: string; ok: boolean } | null,
   hoverMember: number | null,
+  goalHeight = 0,
 ): void {
   drawBackground(ctx, v, w, h, 0);
+  drawGoalLine(ctx, v, w, goalHeight);
 
   ctx.lineCap = 'round';
   design.members.forEach((m, i) => {
@@ -155,8 +177,17 @@ export function drawDesign(
 }
 
 /** 地震中の建物を、部材にかかる力の色で描く */
-export function drawWorld(ctx: CanvasRenderingContext2D, v: Viewport, w: number, h: number, world: World, groundShift: number): void {
+export function drawWorld(
+  ctx: CanvasRenderingContext2D,
+  v: Viewport,
+  w: number,
+  h: number,
+  world: World,
+  groundShift: number,
+  goalHeight = 0,
+): void {
   drawBackground(ctx, v, w, h, groundShift);
+  drawGoalLine(ctx, v, w, goalHeight);
 
   ctx.lineCap = 'round';
   for (const m of world.members) {
