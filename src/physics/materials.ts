@@ -29,7 +29,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
   wood: {
     id: 'wood',
     name: '木材',
-    axialStiffness: 1.6e+05,
+    axialStiffness: 1.6e5,
     massPerMeter: 0.5,
     breakStrain: 0.013,
     jointStiffness: 1500,
@@ -40,7 +40,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
   steel: {
     id: 'steel',
     name: '鉄骨',
-    axialStiffness: 6.0e+05,
+    axialStiffness: 6.0e5,
     massPerMeter: 1.2,
     breakStrain: 0.06,
     jointStiffness: 5000,
@@ -51,7 +51,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
   concrete: {
     id: 'concrete',
     name: '鉄筋コンクリート',
-    axialStiffness: 4.5e+05,
+    axialStiffness: 4.5e5,
     massPerMeter: 2.5,
     breakStrain: 0.007,
     jointStiffness: 6000,

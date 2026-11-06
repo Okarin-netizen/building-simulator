@@ -3,6 +3,7 @@
 import type { Design } from '../physics/design';
 import { MATERIALS } from '../physics/materials';
 import type { FirstBreak } from '../physics/world';
+import { distanceToSegment, midpoint, type Point } from '../physics/geometry';
 
 /** 最初にこわれそうな部材を1本選ぶか、「こわれない」と予想する */
 export type Prediction = { kind: 'member'; index: number } | { kind: 'none' };
@@ -56,21 +57,10 @@ export function describePrediction(design: Design, p: Prediction): string {
 }
 
 /** こわれた場所の位置（設計図の座標） */
-export function breakPoint(design: Design, fb: FirstBreak): { x: number; y: number } {
+export function breakPoint(design: Design, fb: FirstBreak): Point {
   if (fb.kind === 'joint') return design.nodes[fb.node];
   const m = design.members[fb.index];
-  const a = design.nodes[m.a];
-  const b = design.nodes[m.b];
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-}
-
-/** 点と線分のいちばん近い距離 */
-function distanceToSegment(p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }): number {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len2 = dx * dx + dy * dy || 1e-9;
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+  return midpoint(design.nodes[m.a], design.nodes[m.b]);
 }
 
 export function judgePrediction(design: Design, p: Prediction, fb: FirstBreak | null): PredictionResult {

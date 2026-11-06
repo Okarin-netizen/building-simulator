@@ -17,6 +17,10 @@ export const FIELDS = {
 export type FieldId = keyof typeof FIELDS;
 export type FormValues = Record<FieldId, string>;
 
+const FIELD_IDS = Object.keys(FIELDS) as FieldId[];
+/** 見つからなかった、必ず要る項目 */
+const missingRequired = (entries: Partial<Record<FieldId, string>>) => FIELD_IDS.filter((f) => FIELDS[f].required && !entries[f]);
+
 export interface FormTemplate {
   /** 事前入力リンクから、置きかえる言葉以外を取り出したもの */
   url: string;
@@ -28,6 +32,12 @@ export type ParseResult = { ok: true; template: FormTemplate; unused: FieldId[] 
 
 const FORM_HOST = 'docs.google.com';
 const FORM_PATH = /^\/forms\/(u\/\d+\/)?d\/e\/[\w-]+\/viewform$/;
+const ENTRY_KEY = /^entry\.\d+$/;
+
+/** Google フォームの回答ページの URL か */
+const isFormUrl = (u: URL) => u.protocol === 'https:' && u.hostname === FORM_HOST && FORM_PATH.test(u.pathname);
+/** 送り先の URL（? や # のあとを取りのぞいたもの） */
+const formUrl = (u: URL) => `https://${FORM_HOST}${u.pathname}`;
 
 /** 先生が貼った事前入力リンクを読み取る */
 export function parseFormTemplate(input: string): ParseResult {
@@ -37,24 +47,24 @@ export function parseFormTemplate(input: string): ParseResult {
   } catch {
     return { ok: false, reason: 'リンクの形がちがいます。フォームの「事前入力したURLを取得」でできたリンクを貼ってください。' };
   }
-  if (u.protocol !== 'https:' || u.hostname !== FORM_HOST || !FORM_PATH.test(u.pathname)) {
+  if (!isFormUrl(u)) {
     return { ok: false, reason: 'Google フォームのリンクではありません（docs.google.com/forms/… で始まるリンクを貼ってください）。' };
   }
   const entries: Partial<Record<FieldId, string>> = {};
   for (const [key, value] of u.searchParams) {
-    if (!/^entry\.\d+$/.test(key)) continue;
-    const id = (Object.keys(FIELDS) as FieldId[]).find((f) => FIELDS[f].placeholder === value.trim().toUpperCase());
+    if (!ENTRY_KEY.test(key)) continue;
+    const id = FIELD_IDS.find((f) => FIELDS[f].placeholder === value.trim().toUpperCase());
     if (id) entries[id] = key;
   }
-  const missing = (Object.keys(FIELDS) as FieldId[]).filter((f) => FIELDS[f].required && !entries[f]);
+  const missing = missingRequired(entries);
   if (missing.length > 0) {
     return {
       ok: false,
       reason: `次の質問が見つかりません：${missing.map((f) => `${FIELDS[f].label}（${FIELDS[f].placeholder}）`).join('、')}。事前入力のときに、その質問へ英字の言葉をそのまま入れてください。`,
     };
   }
-  const unused = (Object.keys(FIELDS) as FieldId[]).filter((f) => !entries[f]);
-  return { ok: true, template: { url: `https://${FORM_HOST}${u.pathname}`, entries }, unused };
+  const unused = FIELD_IDS.filter((f) => !entries[f]);
+  return { ok: true, template: { url: formUrl(u), entries }, unused };
 }
 
 /** 生徒の記録を入れた、記入済みフォームのリンク */
@@ -93,12 +103,12 @@ export function validateTemplate(raw: unknown): FormTemplate | null {
   } catch {
     return null;
   }
-  if (u.protocol !== 'https:' || u.hostname !== FORM_HOST || !FORM_PATH.test(u.pathname)) return null;
+  if (!isFormUrl(u)) return null;
   const entries: Partial<Record<FieldId, string>> = {};
-  for (const id of Object.keys(FIELDS) as FieldId[]) {
+  for (const id of FIELD_IDS) {
     const e = (t.entries as Record<string, unknown>)[id];
-    if (typeof e === 'string' && /^entry\.\d+$/.test(e)) entries[id] = e;
+    if (typeof e === 'string' && ENTRY_KEY.test(e)) entries[id] = e;
   }
-  if ((Object.keys(FIELDS) as FieldId[]).some((f) => FIELDS[f].required && !entries[f])) return null;
-  return { url: `https://${FORM_HOST}${u.pathname}`, entries };
+  if (missingRequired(entries).length > 0) return null;
+  return { url: formUrl(u), entries };
 }
