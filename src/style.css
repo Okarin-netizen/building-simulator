@@ -751,6 +751,98 @@ canvas {
   }
 }
 
+/* ---------- クラスランキング ---------- */
+
+.menu-free {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.class-status {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--green);
+  font-weight: 700;
+}
+
+.class-status:empty {
+  display: none;
+}
+
+.note {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--quiet);
+  margin: 0 0 8px;
+}
+
+.steps {
+  font-size: 14px;
+  line-height: 1.8;
+  padding-left: 1.4em;
+  margin: 0 0 10px;
+}
+
+.steps code {
+  font-family: ui-monospace, monospace;
+  font-weight: 700;
+  background: var(--yellow-soft);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+
+#class-dialog textarea,
+#send-dialog input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+}
+
+#send-dialog input {
+  font-size: 16px;
+}
+
+.class-msg {
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 8px;
+}
+
+.class-msg.ng {
+  color: #b3261e;
+}
+
+.class-msg.ok {
+  color: var(--green);
+}
+
+.class-msg:empty {
+  display: none;
+}
+
+.class-link[hidden] {
+  display: none;
+}
+
+.send-card {
+  width: min(480px, 100%);
+}
+
+.send-summary {
+  font-size: 15px;
+  font-weight: 700;
+  background: var(--yellow-soft);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
 /* ---------- せまい画面 ---------- */
 
 @media (max-width: 720px) {
