@@ -1,6 +1,6 @@
 // 各ステージが「工夫すれば解ける」「工夫しないと解けない」ことを確かめる。
 
-import { designCost, frameDesign, type Design } from '../physics/design';
+import { addMember, designCost, frameDesign, type Design } from '../physics/design';
 import { makeQuake } from '../physics/quake';
 import { createWorld, step } from '../physics/world';
 import { canStartTest, evaluate } from './evaluate';
@@ -9,7 +9,9 @@ import { VIEW } from '../render';
 
 function play(stage: Stage, design: Design) {
   expect(canStartTest(stage, design).ok).toBe(true);
-  const world = createWorld(design, makeQuake(stage.quake.level, stage.quake.type));
+  const world = stage.wind
+    ? createWorld(design, null, { speed: stage.wind, duration: 15 })
+    : createWorld(design, makeQuake(stage.quake.level, stage.quake.type));
   for (let i = 0; i < 18 * 60; i++) step(world, 1 / 60);
   return evaluate(stage, design, world);
 }
@@ -118,4 +120,42 @@ test('4-2：ゆったりした揺れでは、下2階だけ鉄骨の7階建ては
   expect(play(s, solved).cleared).toBe(true);
   // ふつうの揺れなら、下2階だけ鉄骨でも耐える（揺れ方で結果が変わる）
   expect(play(stage('challenge'), bracedTower([S, S, W, W, W, W, W])).cleared).toBe(true);
+});
+
+test('5-1：強い風で木造5階建ては倒れ、1階を鉄骨にするか、幅を8mに広げれば耐える', () => {
+  const s = stage('5-1');
+  expect(play(s, s.initial()).cleared).toBe(false);
+  expect(play(s, bracedTower([S, W, W, W, W])).cleared).toBe(true);
+  const wide = wideTower(5, 2);
+  expect(designCost(wide)).toBeLessThanOrEqual(s.budget);
+  expect(play(s, wide).cleared).toBe(true);
+});
+
+/** 筋交いと反対向きに、制震ダンパーを下から floors 階分入れる */
+function withDampers(d: Design, floors: number): Design {
+  const c: Design = JSON.parse(JSON.stringify(d));
+  for (let f = 0; f < floors; f++) {
+    const y0 = f * 3;
+    if (f % 2 === 0) addMember(c, 4, y0, 0, y0 + 3, 'damper');
+    else addMember(c, 0, y0, 4, y0 + 3, 'damper');
+  }
+  return c;
+}
+
+test('6-1：木造6階建ては倒れ、1階に制震ダンパーを1本入れると予算内で耐える', () => {
+  const s = stage('6-1');
+  expect(play(s, s.initial()).cleared).toBe(false);
+  const solved = withDampers(s.initial(), 1);
+  expect(designCost(solved)).toBeLessThanOrEqual(s.budget);
+  expect(play(s, solved).cleared).toBe(true);
+});
+
+test('6-2：コンクリートの5階建ては倒れ、免震ゴムを入れると予算内でこわれずに耐える', () => {
+  const s = stage('6-2');
+  expect(play(s, s.initial()).cleared).toBe(false);
+  const iso = { ...s.initial(), isolated: true };
+  expect(designCost(iso)).toBeLessThanOrEqual(s.budget);
+  const ev = play(s, iso);
+  expect(ev.cleared).toBe(true);
+  expect(ev.checks[1].ok).toBe(true); // こわれた所が0
 });

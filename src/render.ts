@@ -2,7 +2,7 @@
 
 import { MATERIALS } from './physics/materials';
 import type { Design } from './physics/design';
-import { memberStressRatio, type FirstBreak, type World } from './physics/world';
+import { memberStressRatio, SETTLE_TIME, windSpeed, type FirstBreak, type World } from './physics/world';
 
 /** 画面に映す範囲（メートル） */
 export const VIEW = { minX: -6, maxX: 16, maxY: 30 };
@@ -201,6 +201,48 @@ function drawLoad(ctx: CanvasRenderingContext2D, v: Viewport, points: { x: numbe
   ctx.restore();
 }
 
+/** 免震ゴム：基礎の下の、黒い丸みのある台 */
+function drawIsolators(ctx: CanvasRenderingContext2D, v: Viewport, points: { x: number; y: number }[]): void {
+  ctx.save();
+  for (const p of points) {
+    const s = toScreen(v, p.x, 0);
+    ctx.fillStyle = '#2b2b2b';
+    ctx.strokeStyle = '#f6c343';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(s.sx - 13, s.sy + 1, 26, 12, 6);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** 風：左から吹く矢印。長さは風速に合わせる */
+function drawWind(ctx: CanvasRenderingContext2D, v: Viewport, speed: number): void {
+  if (speed <= 0) return;
+  ctx.save();
+  ctx.strokeStyle = 'rgba(46, 90, 160, 0.75)';
+  ctx.fillStyle = 'rgba(46, 90, 160, 0.75)';
+  ctx.lineWidth = 3;
+  const left = toScreen(v, VIEW.minX + 0.5, 0).sx;
+  for (let y = 2; y < VIEW.maxY; y += 3) {
+    // 高い所ほど風が強い
+    const len = Math.min(5, (speed / 10) * Math.pow(Math.max(y, 1) / 10, 0.4)) * v.scale;
+    const { sy } = toScreen(v, 0, y);
+    ctx.beginPath();
+    ctx.moveTo(left, sy);
+    ctx.lineTo(left + len, sy);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(left + len + 8, sy);
+    ctx.lineTo(left + len - 2, sy - 6);
+    ctx.lineTo(left + len - 2, sy + 6);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 const loadLabel = (l: { mass: number; name?: string }) => `${l.name ?? 'おもり'} ${l.mass}`;
 
 function memberWidth(v: Viewport): number {
@@ -260,6 +302,7 @@ export function drawDesign(
     drawNodeDot(ctx, b.sx, b.sy, '#ffffff', '#3c4450');
   }
 
+  if (design.isolated) drawIsolators(ctx, v, design.nodes.filter((n) => n.y <= 0));
   for (const l of design.loads ?? []) drawLoad(ctx, v, design.nodes.filter((n) => n.y === l.y && n.y > 0), loadLabel(l));
 
   if (pinMember !== null && design.members[pinMember]) {
@@ -343,6 +386,8 @@ export function drawWorld(
     }
   });
 
+  if (world.isolation) drawIsolators(ctx, v, world.nodes.filter((n) => n.support));
+  if (world.wind) drawWind(ctx, v, windSpeed(world.wind, world.time - SETTLE_TIME));
   for (const l of world.loads) drawLoad(ctx, v, world.nodes.filter((n) => n.baseY === l.y && !n.support), loadLabel(l));
 
   const fb = marks.firstBreak;

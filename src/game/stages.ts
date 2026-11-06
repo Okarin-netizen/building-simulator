@@ -7,7 +7,7 @@ import type { QuakeLevel, QuakeType } from '../physics/quake';
 
 export interface Stage {
   id: string;
-  chapter: 1 | 2 | 3 | 4 | 'challenge';
+  chapter: 1 | 2 | 3 | 4 | 5 | 6 | 'challenge';
   title: string;
   /** 依頼主からの依頼文 */
   request: string;
@@ -25,6 +25,10 @@ export interface Stage {
   lesson: string;
   /** 生徒が置き場所を決める重いもの（第3章） */
   load?: { name: string; mass: number };
+  /** 地震のかわりに風で試験する（平均の風速 m/s、第5章） */
+  wind?: number;
+  /** 免震ゴムを使える（第6章） */
+  isolation?: boolean;
 }
 
 /** 幅を bays 区画に分けた、筋交い入りの枠（幅 bays × bay m） */
@@ -212,6 +216,50 @@ export const STAGES: Stage[] = [
     lesson:
       '高い建物ほど、ゆっくり揺れやすい（固有周期が長い）ので、ゆったりした揺れ（長周期地震動）と共振しやすくなります。実際に、遠くの大地震で高層ビルが長い時間大きく揺れたことがあります。建物を硬くして揺れやすい速さを変えることが対策になります。',
   },
+  {
+    id: '5-1',
+    chapter: 5,
+    title: '台風に耐える5階建て',
+    request: '台風の通り道に、高さ15mの5階建てを建てます。風速30m/sの強い風に耐えるようにしてください。',
+    goalHeight: 15,
+    budget: 140,
+    quake: { level: 'strong', type: 'mixed' },
+    wind: 30,
+    materials: ['wood', 'steel', 'concrete'],
+    initial: () => bracedTower(['wood', 'wood', 'wood', 'wood', 'wood']),
+    hint: '風は高い所ほど強く、ずっと同じ向きに押し続けます。根元の柱が引っぱられて抜けないよう、下の階を強くするか、幅を広げてみよう。',
+    lesson:
+      '風の力は、高い所ほど強くなります（地面の近くは建物や木で風が弱まるため）。地震とちがって同じ向きに押し続けるので、建物全体を倒そうとする力が根元に集まります。下の階を強い材料にしたり、幅を広げたりすると、風に強くなります。',
+  },
+  {
+    id: '6-1',
+    chapter: 6,
+    title: '制震ダンパーで揺れを吸収',
+    request: 'この木造6階建ては、強い地震で倒れてしまいます。制震ダンパーを入れて、倒れないようにしてください。',
+    goalHeight: 18,
+    budget: 120,
+    quake: { level: 'strong', type: 'mixed' },
+    materials: ['damper'],
+    initial: () => bracedTower(['wood', 'wood', 'wood', 'wood', 'wood', 'wood']),
+    hint: 'ダンパーは、四角の角から角へ、筋交いと反対向きに入れよう。下の階に入れると効きやすいよ。',
+    lesson:
+      '制震ダンパーは、建物が揺れて伸び縮みするときに、揺れのエネルギーを熱に変えて吸収する部材です。筋交いのように「固めて耐える」のではなく、「揺れを早くおさめる」ことで建物を守ります。実際のビルにも、油やゴムを使ったダンパーが入っています。',
+  },
+  {
+    id: '6-2',
+    chapter: 6,
+    title: '免震ゴムで病院を守る',
+    request: '鉄筋コンクリートの5階建ての病院です。地震のあとも使えるよう、強い地震でもこわれないようにしてください。',
+    goalHeight: 15,
+    budget: 175,
+    quake: { level: 'strong', type: 'mixed' },
+    materials: ['concrete'],
+    initial: () => bracedTower(['concrete', 'concrete', 'concrete', 'concrete', 'concrete']),
+    isolation: true,
+    hint: '「免震ゴム」を入れると、建物の下にやわらかいゴムが入ります。地面が揺れても建物はゆっくりとしか動かなくなるよ。',
+    lesson:
+      '免震は、建物と地面の間にやわらかいゴム（免震ゴム）を入れて、地面の速い揺れを建物に伝えにくくする方法です。建物はゆっくり大きく動きますが、中は揺れが小さく、こわれにくくなります。病院や役所など、地震のあとも使いたい建物に使われています。ただし、ゆったりした揺れ（長周期地震動）とは合いやすいので注意が必要です。',
+  },
 ];
 
 export const CHAPTER_NAMES: Record<string, string> = {
@@ -219,6 +267,8 @@ export const CHAPTER_NAMES: Record<string, string> = {
   '2': '第2章 材料を選ぶ',
   '3': '発展 第3章 重さと重心',
   '4': '発展 第4章 揺れ方と共振',
+  '5': '発展 第5章 風',
+  '6': '発展 第6章 制震と免震',
   challenge: 'チャレンジ',
 };
 

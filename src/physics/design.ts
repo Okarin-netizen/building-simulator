@@ -27,7 +27,12 @@ export interface Design {
   members: DesignMember[];
   /** 重いもの（ない設計図もある） */
   loads?: DesignLoad[];
+  /** 免震ゴムの上に建てる */
+  isolated?: boolean;
 }
+
+/** 免震ゴムの値段（基礎1か所あたり、万円） */
+export const ISOLATION_COST_PER_BASE = 10;
 
 export function emptyDesign(): Design {
   return { nodes: [], members: [] };
@@ -87,6 +92,7 @@ export function memberLength(design: Design, m: DesignMember): number {
 export function designCost(design: Design): number {
   let cost = 0;
   for (const m of design.members) cost += memberLength(design, m) * MATERIALS[m.material].costPerMeter;
+  if (design.isolated) cost += design.nodes.filter((n) => n.y <= 0).length * ISOLATION_COST_PER_BASE;
   return Math.round(cost);
 }
 
