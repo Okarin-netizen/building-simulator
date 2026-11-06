@@ -101,3 +101,23 @@ export function loadNotes(): Notes {
 export function saveNotes(notes: Notes): void {
   write(NOTES_KEY, notes);
 }
+
+// ---------- クラスランキングの設定（先生の Google フォーム） ----------
+
+const CLASS_KEY = 'saikou-tower-class-form-v1';
+
+export function loadClassForm(): unknown {
+  return read<unknown>(CLASS_KEY);
+}
+
+export function saveClassForm(t: unknown): void {
+  write(CLASS_KEY, t);
+}
+
+export function clearClassForm(): void {
+  try {
+    localStorage.removeItem(CLASS_KEY);
+  } catch {
+    // 何もしない
+  }
+}

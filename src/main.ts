@@ -7,8 +7,12 @@ import { createWorld, SETTLE_TIME, step, type World } from './physics/world';
 import { canStartTest, evaluate } from './game/evaluate';
 import { judgePrediction, describeMember, type Prediction } from './game/predict';
 import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
+import { buildSubmitUrl, classLinkFor, parseFormTemplate, readClassLink, validateTemplate, type FormTemplate } from './game/classForm';
 import {
   clearAttempts,
+  clearClassForm,
+  loadClassForm,
+  saveClassForm,
   loadAttempts,
   loadDesign,
   loadNotes,
@@ -57,6 +61,8 @@ let prediction: Prediction | null = null;
 let frames: Frame[] = [];
 let replayTime = 0;
 let replayPlaying = false;
+/** いちばん最近の試験結果（クラスに送る用） */
+let lastResult: { stage: string; height: number; stars: number; cost: number; result: string } | null = null;
 let viewport: Viewport = makeViewport(1, 1);
 let cssWidth = 1;
 let cssHeight = 1;
@@ -313,6 +319,17 @@ function showResult(w: World): void {
     verdict: judge.verdict,
   });
 
+  lastResult = stage
+    ? {
+        stage: `${isChallenge ? 'チャレンジ' : stage.id} ${stage.title}`,
+        // ランキングを高さで並べたとき、倒れた建物が上に来ないよう、クリアしなかったら 0m にする
+        height: ev.cleared ? ev.height : 0,
+        stars: ev.stars,
+        cost: designCost(design),
+        result: ev.cleared ? 'クリア' : w.collapsed ? '倒れた' : '高さが足りない',
+      }
+    : null;
+
   const title = ev.cleared
     ? isChallenge
       ? `記録 ${ev.height} m！`
@@ -328,7 +345,8 @@ function showResult(w: World): void {
   html += `<div class="answer ${judge.verdict}"><span class="verdict">${VERDICT_LABEL[judge.verdict]}</span><div><strong>予想の答え合わせ</strong><br>${escapeHtml(judge.message)}<br><small>予想：${escapeHtml(judge.predicted)}　／　結果：${escapeHtml(judge.actual)}</small></div></div>`;
   if (stage && ev.cleared) html += `<div class="lesson"><strong>なぜ？</strong>${escapeHtml(stage.lesson)}</div>`;
   else if (w.collapsed) html += `<div class="lesson"><strong>見直そう</strong>スロー再生で、最初にこわれた所（黄色の輪）を確かめよう。${stage ? escapeHtml(stage.hint) : ''}</div>`;
-  html += `<div class="buttons"><button type="button" data-act="replay">スロー再生で見る</button><button type="button" data-act="rebuild">建て直す</button>`;
+  const canSend = lastResult !== null && classForm() !== null;
+  html += `<div class="buttons">${canSend ? '<button type="button" data-act="send">クラスに送る</button>' : ''}<button type="button" data-act="replay">スロー再生で見る</button><button type="button" data-act="rebuild">建て直す</button>`;
   const next = stage && ev.cleared ? nextStage(stage.id) : undefined;
   if (next) html += `<button type="button" class="primary" data-act="next">次のステージへ</button>`;
   if (stage && ev.cleared && !next) html += `<button type="button" class="primary" data-act="menu">ステージ一覧へ</button>`;
@@ -338,6 +356,7 @@ function showResult(w: World): void {
   resultBox.className = `result ${ev.cleared ? 'ok' : 'fail'}`;
   resultBox.hidden = false;
   resultBox.querySelector('[data-act=replay]')?.addEventListener('click', startReplay);
+  resultBox.querySelector('[data-act=send]')?.addEventListener('click', openSend);
   resultBox.querySelector('[data-act=rebuild]')?.addEventListener('click', backToBuild);
   resultBox.querySelector('[data-act=next]')?.addEventListener('click', () => next && openStage(next));
   resultBox.querySelector('[data-act=menu]')?.addEventListener('click', openMenu);
@@ -457,6 +476,130 @@ $('sheet-clear').addEventListener('click', () => {
 sheet.addEventListener('click', (e) => {
   if (e.target === sheet) sheet.hidden = true;
 });
+
+// ---------- クラスランキング（先生の Google フォーム） ----------
+
+const classDialog = $<HTMLDivElement>('class-dialog');
+const sendDialog = $<HTMLDivElement>('send-dialog');
+const classInput = $<HTMLTextAreaElement>('class-input');
+const classMsg = $<HTMLParagraphElement>('class-msg');
+
+const classForm = (): FormTemplate | null => validateTemplate(loadClassForm());
+
+function refreshClassStatus(): void {
+  $('class-status').textContent = classForm() ? 'クラスランキング：設定ずみ（結果カードの「クラスに送る」で記録を送れます）' : '';
+}
+
+function showClassLink(t: FormTemplate | null): void {
+  $('class-link-box').hidden = !t;
+  if (t) $<HTMLTextAreaElement>('class-link').value = classLinkFor(location.href, t);
+}
+
+function openClassDialog(): void {
+  classInput.value = '';
+  classMsg.textContent = '';
+  classMsg.className = 'class-msg';
+  const t = classForm();
+  if (t) {
+    classMsg.textContent = 'この端末は設定ずみです。別のフォームにするときは、新しいリンクを貼ってください。';
+    classMsg.className = 'class-msg ok';
+  }
+  showClassLink(t);
+  menu.hidden = true;
+  classDialog.hidden = false;
+}
+
+classInput.addEventListener('input', () => {
+  if (!classInput.value.trim()) return;
+  const r = parseFormTemplate(classInput.value);
+  if (!r.ok) {
+    classMsg.textContent = r.reason;
+    classMsg.className = 'class-msg ng';
+    return;
+  }
+  saveClassForm(r.template);
+  const extra = r.unused.length > 0 ? `（${r.unused.length}つの質問はなしで送ります）` : '';
+  classMsg.textContent = `読み取れました${extra}。下のクラスリンクを生徒に配ってください。`;
+  classMsg.className = 'class-msg ok';
+  showClassLink(r.template);
+  refreshClassStatus();
+});
+
+$('class-copy').addEventListener('click', async () => {
+  const box = $<HTMLTextAreaElement>('class-link');
+  try {
+    await navigator.clipboard.writeText(box.value);
+    $('class-copy').textContent = 'コピーしました';
+  } catch {
+    box.select();
+    $('class-copy').textContent = '選んだ所をコピーしてください';
+  }
+  setTimeout(() => ($('class-copy').textContent = 'リンクをコピー'), 2000);
+});
+$('class-test').addEventListener('click', () => {
+  const t = classForm();
+  if (!t) return;
+  const url = buildSubmitUrl(t, { name: 'テスト', group: '先生', stage: 'チャレンジ 最高タワーチャレンジ', height: '0', stars: '0', cost: '0', result: 'ためし' });
+  window.open(url, '_blank', 'noopener');
+});
+$('class-forget').addEventListener('click', () => {
+  if (!confirm('この端末のクラスランキングの設定を消しますか？')) return;
+  clearClassForm();
+  openClassDialog();
+  refreshClassStatus();
+});
+$('class-close').addEventListener('click', () => (classDialog.hidden = true));
+$('open-class').addEventListener('click', openClassDialog);
+
+function openSend(): void {
+  if (!lastResult) return;
+  const notes = loadNotes();
+  $<HTMLInputElement>('send-name').value = notes.nickname ?? '';
+  $<HTMLInputElement>('send-group').value = notes.group ?? '';
+  $('send-summary').textContent = `${lastResult.stage}　高さ ${lastResult.height} m・星 ${lastResult.stars}・費用 ${lastResult.cost} 万円（${lastResult.result}）${lastResult.height === 0 ? '　※クリアしないと高さの記録は 0 m です' : ''}`;
+  sendDialog.hidden = false;
+  $<HTMLInputElement>('send-name').focus();
+}
+
+$('send-cancel').addEventListener('click', () => (sendDialog.hidden = true));
+$('send-go').addEventListener('click', () => {
+  const t = classForm();
+  const name = $<HTMLInputElement>('send-name').value.trim();
+  const group = $<HTMLInputElement>('send-group').value.trim();
+  if (!t || !lastResult) return;
+  if (!name) {
+    $('send-summary').textContent = 'ニックネームを入れてください。';
+    return;
+  }
+  const notes = loadNotes();
+  notes.nickname = name;
+  notes.group = group;
+  saveNotes(notes);
+  const url = buildSubmitUrl(t, {
+    name,
+    group,
+    stage: lastResult.stage,
+    height: String(lastResult.height),
+    stars: String(lastResult.stars),
+    cost: String(lastResult.cost),
+    result: lastResult.result,
+  });
+  window.open(url, '_blank', 'noopener');
+  sendDialog.hidden = true;
+  hint.textContent = '開いたフォームで「送信」を押してください。';
+});
+for (const d of [classDialog, sendDialog])
+  d.addEventListener('click', (e) => {
+    if (e.target === d) d.hidden = true;
+  });
+
+/** クラスリンクから開いたときは、先生のフォームの設定を読みこむ */
+function loadClassLinkFromUrl(): void {
+  const t = readClassLink(location.hash);
+  if (!t) return;
+  saveClassForm(t);
+  history.replaceState(null, '', location.pathname + location.search);
+}
 
 // ---------- 入力 ----------
 
@@ -610,6 +753,8 @@ function currentShift(w: World): number {
 }
 
 resize();
+loadClassLinkFromUrl();
+refreshClassStatus();
 let lastId: string | null = null;
 try {
   lastId = localStorage.getItem(LAST_STAGE_KEY);

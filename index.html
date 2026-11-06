@@ -135,7 +135,9 @@
         <div id="menu-list"></div>
         <div class="menu-free">
           <button type="button" id="free-mode">自由に作る（実験モード）</button>
+          <button type="button" id="open-class">先生用：クラスランキングの設定</button>
         </div>
+        <p class="class-status" id="class-status"></p>
       </div>
     </div>
 
@@ -157,6 +159,53 @@
           <button type="button" id="sheet-print" class="primary">印刷する</button>
           <button type="button" id="sheet-clear">記録を消す</button>
           <button type="button" id="sheet-close">閉じる</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="menu" id="class-dialog" hidden>
+      <div class="menu-card">
+        <h2>クラスランキングの設定（先生用）</h2>
+        <p class="note">生徒の記録を、先生の Google フォームに集めます。サーバーは使わず、記録はフォームの回答（スプレッドシート）にだけ残ります。</p>
+        <ol class="steps">
+          <li>Google フォームを作り、記述式（短文・入力チェックなし）の質問を作る：<b>ニックネーム</b>・<b>ステージ</b>・<b>高さ</b>（必須）、<b>組・班</b>・<b>星</b>・<b>費用</b>・<b>結果</b>（なくてもよい）</li>
+          <li>フォームの「︙」→「事前入力したURLを取得」で、各質問に次の英字を入れる：<br><code>NAME</code>・<code>STAGE</code>・<code>HEIGHT</code>・<code>GROUP</code>・<code>STARS</code>・<code>COST</code>・<code>RESULT</code></li>
+          <li>「リンクを取得」→「リンクをコピー」して、下に貼る</li>
+          <li>授業では、回答のスプレッドシートを「高さ」の列で降順（Z→A）に並べ替えると、ランキングになります</li>
+        </ol>
+        <label>事前入力リンク
+          <textarea id="class-input" rows="3" placeholder="https://docs.google.com/forms/d/e/…/viewform?usp=pp_url&amp;entry.…=NAME…"></textarea>
+        </label>
+        <p class="class-msg" id="class-msg"></p>
+        <div class="class-link" id="class-link-box" hidden>
+          <h3>生徒に配るクラスリンク</h3>
+          <p class="note">このリンクを Classroom などで配ってください。開いた端末で「クラスに送る」が使えるようになります。</p>
+          <textarea id="class-link" rows="3" readonly></textarea>
+          <div class="buttons">
+            <button type="button" id="class-copy" class="primary">リンクをコピー</button>
+            <button type="button" id="class-test">記入済みフォームを試しに開く</button>
+          </div>
+        </div>
+        <div class="buttons sheet-actions">
+          <button type="button" id="class-forget">この端末の設定を消す</button>
+          <button type="button" id="class-close">閉じる</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="menu" id="send-dialog" hidden>
+      <div class="menu-card send-card">
+        <h2>クラスに記録を送る</h2>
+        <p class="note">本名ではなく、ニックネームで送ろう。</p>
+        <div class="sheet-names">
+          <label>ニックネーム <input type="text" id="send-name" maxlength="20" autocomplete="off" /></label>
+          <label>組・班 <input type="text" id="send-group" maxlength="20" autocomplete="off" /></label>
+        </div>
+        <p class="send-summary" id="send-summary"></p>
+        <p class="note">ボタンを押すと、記入済みのフォームが新しいタブで開きます。フォームの「送信」を押したら完了です。</p>
+        <div class="buttons sheet-actions">
+          <button type="button" id="send-cancel">やめる</button>
+          <button type="button" id="send-go" class="primary">フォームを開く</button>
         </div>
       </div>
     </div>
