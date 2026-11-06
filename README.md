@@ -63,3 +63,10 @@ npm run build   # dist/ に公開用ファイルを作る
 筋交いがあると部材の伸び縮みで耐えるため、揺れが小さく済みます。
 
 数値は実物の大小関係に合わせたゲーム用の値で、実際の建物の強さを表すものではありません。
+
+## 作者・ライセンス
+
+- 作者：技術科　岡田
+- ライセンス：MIT（[LICENSE](./LICENSE)）
+- フォント Dela Gothic One・Zen Kaku Gothic New は SIL Open Font License 1.1（Google Fonts から読みこみ）
+- 更新履歴とライセンスは、アプリ右上の「このアプリについて」でも見られます（`src/game/about.ts`。新しい版を出したら `CHANGELOG` の先頭に足し、`package.json` の version もそろえる）
