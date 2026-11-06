@@ -1,7 +1,7 @@
 // 各ステージが「工夫すれば解ける」「工夫しないと解けない」ことを確かめる。
 
 import { addMember, designCost, frameDesign, type Design } from '../physics/design';
-import { makeQuake } from '../physics/quake';
+import { makeQuake, TEST_DURATION } from '../physics/quake';
 import { createWorld, step } from '../physics/world';
 import { canStartTest, evaluate } from './evaluate';
 import { bracedTower, stageById, STAGES, wideTower, type Stage } from './stages';
@@ -10,7 +10,7 @@ import { VIEW } from '../render';
 function play(stage: Stage, design: Design) {
   expect(canStartTest(stage, design).ok).toBe(true);
   const world = stage.wind
-    ? createWorld(design, null, { speed: stage.wind, duration: 15 })
+    ? createWorld(design, null, { speed: stage.wind, duration: TEST_DURATION })
     : createWorld(design, makeQuake(stage.quake.level, stage.quake.type));
   for (let i = 0; i < 18 * 60; i++) step(world, 1 / 60);
   return evaluate(stage, design, world);
