@@ -1,6 +1,6 @@
 // デバッガー視点で見つけた不具合が、もう一度起きないことを確かめる。
 
-import { addMember, frameDesign } from '../physics/design';
+import { addMember, frameDesign, removeMember } from '../physics/design';
 import { makeQuake } from '../physics/quake';
 import { createWorld, step } from '../physics/world';
 import { canStartTest, evaluate, hasFloatingMember } from './evaluate';
@@ -52,4 +52,16 @@ test('6-2：免震ゴムの台ごとゆっくり動く分は、揺れ幅に数�
   expect(Math.abs(world.isolation!.u)).toBeGreaterThan(0); // 台は動いている
   const ev = evaluate(s, iso, world);
   expect(ev.stars).toBe(3);
+});
+
+test('3-1：機械を置いた床の部材を消して床がなくなったら、機械も外れる', () => {
+  const d = { ...stageById('3-1')!.initial(), loads: [{ y: 12, mass: 50, name: '機械' }] };
+  // 高さ12mにつながる部材（左右の柱・梁・筋交い）を消す
+  for (;;) {
+    const i = d.members.findIndex((m) => d.nodes[m.a].y === 12 || d.nodes[m.b].y === 12);
+    if (i < 0) break;
+    removeMember(d, i);
+    if (d.nodes.some((n) => n.y === 12)) expect(d.loads).toHaveLength(1); // 床が残っているうちは残る
+  }
+  expect(d.loads).toEqual([]);
 });

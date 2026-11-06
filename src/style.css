@@ -460,6 +460,11 @@ canvas {
   box-shadow: 0 6px 0 var(--ink);
 }
 
+.result.left {
+  right: auto;
+  left: 24px;
+}
+
 .result-head {
   display: flex;
   align-items: center;

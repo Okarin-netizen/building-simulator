@@ -27,7 +27,7 @@ import {
 } from './game/progress';
 import { APP_LICENSE, AUTHOR, CHANGELOG, MIT_TEXT, THIRD_PARTY } from './game/about';
 import { CHAPTER_NAMES, nextStage, stageById, stageFullTitle, stageLabel, STAGES, type Stage } from './game/stages';
-import { drawDesign, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
+import { drawDesign, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
 
 const FREE_ID = 'free';
 
@@ -285,6 +285,8 @@ function refreshPanel(): void {
   startBtn.hidden = running;
   resetBtn.hidden = !running;
   resetBtn.disabled = !running;
+  // 試験中は開けないので、押せないことが見て分かるようにする
+  for (const id of ['open-menu', 'open-sheet', 'open-howto']) $<HTMLButtonElement>(id).disabled = phase === 'test';
   levelSelect.disabled = running;
   typeSelect.disabled = running;
 
@@ -349,6 +351,7 @@ function startQuake(): void {
   const wind = stage?.wind ? { speed: stage.wind, duration: TEST_DURATION } : null;
   world = createWorld(design, wind ? null : quake, wind);
   frames = [captureFrame(world, 0)];
+  simLag = 0;
   phase = 'test';
   predictBox.hidden = true;
   resultBox.hidden = true;
@@ -380,6 +383,7 @@ const VERDICT_LABEL = { hit: '大当たり', near: 'おしい', miss: 'はずれ
 
 function showResult(w: World): void {
   phase = 'result';
+  refreshPanel();
   const ev = evaluate(stage, design, w);
   const judge = judgePrediction(design, prediction ?? { kind: 'none' }, w.firstBreak);
   const isChallenge = stage?.chapter === 'challenge';
@@ -443,6 +447,7 @@ function showResult(w: World): void {
   resultBox.innerHTML = html;
   resultBox.className = `result ${ev.cleared ? 'ok' : 'fail'}`;
   resultBox.hidden = false;
+  placeResultBox(w);
   resultBox.querySelector('[data-act=replay]')?.addEventListener('click', startReplay);
   resultBox.querySelector('[data-act=send]')?.addEventListener('click', openSend);
   resultBox.querySelector('[data-act=rebuild]')?.addEventListener('click', backToBuild);
@@ -453,6 +458,24 @@ function showResult(w: World): void {
     : '「スロー再生で見る」で、揺れ方をもう一度見られます。';
   refreshPanel();
 }
+
+/** 結果カードを、建物に重ならない側（右か左）に置く。どちらにも入らなければ、すき間の広い側 */
+function placeResultBox(w: World): void {
+  resultBox.classList.remove('left');
+  resultBox.style.width = '';
+  const xs = w.nodes.map((n) => toScreen(viewport, n.x, n.y).sx);
+  if (xs.length === 0) return;
+  const gap = 24;
+  const need = resultBox.offsetWidth + gap * 2;
+  const roomRight = cssWidth - Math.max(...xs);
+  const roomLeft = Math.min(...xs);
+  const left = roomRight < need && (roomLeft >= need || roomLeft > roomRight);
+  resultBox.classList.toggle('left', left);
+  // どちらにも入らないときは、すき間の広い側に合わせてカードを細くする（細くしすぎない）
+  const room = (left ? roomLeft : roomRight) - gap * 2;
+  if (room < resultBox.offsetWidth) resultBox.style.width = `${Math.max(MIN_RESULT_WIDTH, room)}px`;
+}
+const MIN_RESULT_WIDTH = 300;
 
 // ---------- スロー再生 ----------
 
@@ -531,12 +554,12 @@ function openSheet(): void {
     const rows = attempts
       .map((a) => {
         const d = new Date(a.at);
-        const time = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+        const time = `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
         const result = a.cleared ? (a.stars > 0 ? `${'★'.repeat(a.stars)}` : '耐えた') : '×';
         return `<tr><td>${time}</td><td>${escapeHtml(a.stageTitle)}</td><td>${a.height}m / ${a.cost}万円</td><td>${escapeHtml(a.predicted)}</td><td>${escapeHtml(a.actual)}</td><td class="v-${a.verdict}">${VERDICT_LABEL[a.verdict]}</td><td>${result}</td></tr>`;
       })
       .join('');
-    box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>時刻</th><th>ステージ</th><th>高さ・費用</th><th>予想</th><th>最初にこわれた所</th><th>答え合わせ</th><th>結果</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>日時</th><th>ステージ</th><th>高さ・費用</th><th>予想</th><th>最初にこわれた所</th><th>答え合わせ</th><th>結果</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
   const qs = $('sheet-questions');
   qs.innerHTML = QUESTIONS.map(
@@ -571,7 +594,9 @@ $('sheet-print').addEventListener('click', () => window.print());
 $('sheet-clear').addEventListener('click', () => {
   if (!confirm('試験の記録と書いたことを全部消しますか？')) return;
   clearAttempts();
-  saveNotes({});
+  // クラスに送るときのニックネームは、ふりかえりの記録ではないので残す
+  const { nickname } = loadNotes();
+  saveNotes(nickname ? { nickname } : {});
   openSheet();
 });
 closeOnBackdrop(sheet);
@@ -642,7 +667,10 @@ $('class-test').addEventListener('click', () => {
   const t = classForm();
   if (!t) return;
   const url = buildSubmitUrl(t, { name: 'テスト', group: '先生', stage: 'チャレンジ 最高タワーチャレンジ', height: '0', stars: '0', cost: '0', result: 'ためし' });
-  window.open(url, '_blank', 'noopener');
+  if (!openTab(url)) {
+    classMsg.className = 'class-msg ng';
+    showFallbackLink(classMsg, url);
+  }
 });
 $('class-forget').addEventListener('click', () => {
   if (!confirm('この端末のクラスランキングの設定を消しますか？')) return;
@@ -659,6 +687,7 @@ function openSend(): void {
   sendName.value = notes.nickname ?? '';
   sendGroup.value = notes.group ?? '';
   $('send-summary').textContent = `${lastResult.stage}　高さ ${lastResult.height} m・星 ${lastResult.stars}・費用 ${lastResult.cost} 万円（${lastResult.result}）${lastResult.height === 0 ? '　※クリアしないと高さの記録は 0 m です' : ''}`;
+  $('send-fallback').hidden = true;
   sendDialog.hidden = false;
   sendName.focus();
 }
@@ -686,7 +715,11 @@ $('send-go').addEventListener('click', () => {
     cost: String(lastResult.cost),
     result: lastResult.result,
   });
-  window.open(url, '_blank', 'noopener');
+  if (!openTab(url)) {
+    // ダイアログは閉じずに、リンクを押してもらう
+    showFallbackLink($('send-fallback'), url);
+    return;
+  }
   sendDialog.hidden = true;
   hint.textContent = '開いたフォームで「送信」を押してください。';
 });
@@ -738,6 +771,28 @@ buildAbout();
 $('open-about').addEventListener('click', () => (aboutDialog.hidden = false));
 $('about-close').addEventListener('click', () => (aboutDialog.hidden = true));
 closeOnBackdrop(aboutDialog);
+
+/**
+ * 新しいタブでフォームを開く。ポップアップがブロックされて開けなかったら false。
+ * （'noopener' をつけると開けたかどうか分からないので、開いてから opener を切る）
+ */
+function openTab(url: string): boolean {
+  const w = window.open(url, '_blank');
+  if (!w) return false;
+  w.opener = null;
+  return true;
+}
+
+/** 開けなかったときに、押せばフォームが開くリンクを見せる */
+function showFallbackLink(box: HTMLElement, url: string): void {
+  box.replaceChildren('新しいタブを開けませんでした。ここを押してフォームを開いてください：');
+  const a = el('a', 'フォームを開く');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  box.append(a);
+  box.hidden = false;
+}
 
 // ---------- 遊び方 ----------
 
@@ -822,10 +877,14 @@ canvas.addEventListener('pointerdown', (e) => {
     const i = memberAt(p);
     if (i !== null) {
       remember();
+      const hadLoad = (design.loads?.length ?? 0) > 0;
       removeMember(design, i);
       persist();
       refreshPanel();
-      hint.textContent = '部材を消しました。置くときは「部材を置く」にもどしてね。';
+      hint.textContent =
+        hadLoad && !design.loads?.length && stage?.load
+          ? `床がなくなったので、${stage.load.name}を外しました。「${stage.load.name}を置く」で置き直そう。`
+          : '部材を消しました。置くときは「部材を置く」にもどしてね。';
     } else {
       hint.textContent = 'いまは「部材を消す」になっています。部材を置くときは「部材を置く」を選ぼう。';
     }
@@ -903,6 +962,10 @@ function resize(): void {
 new ResizeObserver(resize).observe(canvas);
 
 let lastFrameAt = performance.now();
+/** 計算の1歩（秒） */
+const SIM_STEP = 1 / 60;
+/** まだ計算していない、たまった時間（秒） */
+let simLag = 0;
 
 const legend = $<HTMLDivElement>('legend');
 
@@ -914,10 +977,16 @@ function frame(now: number): void {
   const dt = Math.min(0.1, (now - lastFrameAt) / 1000);
   lastFrameAt = now;
   if (world && phase === 'test') {
-    step(world, (1 / 60) * (slowCheck.checked ? 0.25 : 1));
-    frames.push(captureFrame(world, currentShift(world)));
+    // 画面の書きかえの速さ（30回/秒の端末、120回/秒の画面など）によらず、実際の時間どおりに進める。
+    // 計算はいつも 1/60 秒ずつ進めるので、スロー再生でもふつうでも結果は同じになる
+    simLag += dt * (slowCheck.checked ? 0.25 : 1);
     const quakeEnd = SETTLE_TIME + (world.quake?.duration ?? world.wind?.duration ?? 0) + 2;
-    if (world.time > quakeEnd || (world.collapsed && world.time > (world.collapseTime ?? 0) + 2.5)) showResult(world);
+    while (simLag >= SIM_STEP && phase === 'test') {
+      simLag -= SIM_STEP;
+      step(world, SIM_STEP);
+      frames.push(captureFrame(world, currentShift(world)));
+      if (world.time > quakeEnd || (world.collapsed && world.time > (world.collapseTime ?? 0) + 2.5)) showResult(world);
+    }
   }
   if (world && phase === 'replay') {
     if (replayPlaying) {
