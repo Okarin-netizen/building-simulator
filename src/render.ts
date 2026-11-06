@@ -2,7 +2,8 @@
 
 import { MATERIALS } from './physics/materials';
 import type { Design } from './physics/design';
-import { memberStressRatio, SETTLE_TIME, windSpeed, type FirstBreak, type World } from './physics/world';
+import { midpoint } from './physics/geometry';
+import { memberStressRatio, SETTLE_TIME, windHeightFactor, windSpeed, type FirstBreak, type World } from './physics/world';
 
 /** 画面に映す範囲（メートル） */
 export const VIEW = { minX: -6, maxX: 16, maxY: 30 };
@@ -27,6 +28,24 @@ export function makeViewport(width: number, height: number): Viewport {
 
 export const toScreen = (v: Viewport, x: number, y: number) => ({ sx: v.originX + x * v.scale, sy: v.groundY - y * v.scale });
 export const toWorld = (v: Viewport, sx: number, sy: number) => ({ x: (sx - v.originX) / v.scale, y: (v.groundY - sy) / v.scale });
+/** 点（メートル）を画面の位置にする */
+const screenOf = (v: Viewport, p: { x: number; y: number }) => toScreen(v, p.x, p.y);
+
+type ScreenPoint = { sx: number; sy: number };
+
+/** 画面上の2点を結ぶ線を、いまの線の色・太さで引く */
+function strokeLine(ctx: CanvasRenderingContext2D, a: ScreenPoint, b: ScreenPoint): void {
+  ctx.beginPath();
+  ctx.moveTo(a.sx, a.sy);
+  ctx.lineTo(b.sx, b.sy);
+  ctx.stroke();
+}
+
+/** 基礎（地面とのつなぎ目）の土台 */
+function drawFoundation(ctx: CanvasRenderingContext2D, p: ScreenPoint): void {
+  ctx.fillStyle = '#5b4a33';
+  ctx.fillRect(p.sx - 9, p.sy - 2, 18, 8);
+}
 
 /** 0（余裕）→ 1（こわれそう）を 青 → 黄 → 赤 にする */
 export function stressColor(ratio: number): string {
@@ -43,23 +62,18 @@ function drawBackground(ctx: CanvasRenderingContext2D, v: Viewport, w: number, h
   ctx.fillStyle = '#dfeef7';
   ctx.fillRect(0, 0, w, h);
 
-  // 1m ごとの方眼
+  // 1m ごとの方眼（5m ごとに少し濃く）
+  const gridColor = (meters: number) => (meters % 5 === 0 ? '#bcd3e3' : '#cfe1ec');
   ctx.lineWidth = 1;
   for (let x = Math.ceil(VIEW.minX); x <= VIEW.maxX; x++) {
     const { sx } = toScreen(v, x, 0);
-    ctx.strokeStyle = x % 5 === 0 ? '#bcd3e3' : '#cfe1ec';
-    ctx.beginPath();
-    ctx.moveTo(sx, 0);
-    ctx.lineTo(sx, v.groundY);
-    ctx.stroke();
+    ctx.strokeStyle = gridColor(x);
+    strokeLine(ctx, { sx, sy: 0 }, { sx, sy: v.groundY });
   }
   for (let y = 1; y <= VIEW.maxY; y++) {
     const { sy } = toScreen(v, 0, y);
-    ctx.strokeStyle = y % 5 === 0 ? '#bcd3e3' : '#cfe1ec';
-    ctx.beginPath();
-    ctx.moveTo(0, sy);
-    ctx.lineTo(w, sy);
-    ctx.stroke();
+    ctx.strokeStyle = gridColor(y);
+    strokeLine(ctx, { sx: 0, sy }, { sx: w, sy });
     if (y % 5 === 0) {
       ctx.fillStyle = '#5a6b78';
       ctx.font = 'bold 12px system-ui';
@@ -73,20 +87,12 @@ function drawBackground(ctx: CanvasRenderingContext2D, v: Viewport, w: number, h
   ctx.fillRect(0, v.groundY, w, h - v.groundY);
   ctx.strokeStyle = '#5a4126';
   ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(0, v.groundY);
-  ctx.lineTo(w, v.groundY);
-  ctx.stroke();
+  strokeLine(ctx, { sx: 0, sy: v.groundY }, { sx: w, sy: v.groundY });
   ctx.strokeStyle = 'rgba(40, 26, 10, 0.35)';
   ctx.lineWidth = 2;
   const step = 24;
   const offset = ((shiftPx % step) + step) % step;
-  for (let x = -step + offset; x < w + step; x += step) {
-    ctx.beginPath();
-    ctx.moveTo(x, v.groundY + 6);
-    ctx.lineTo(x - 10, v.groundY + 18);
-    ctx.stroke();
-  }
+  for (let x = -step + offset; x < w + step; x += step) strokeLine(ctx, { sx: x, sy: v.groundY + 6 }, { sx: x - 10, sy: v.groundY + 18 });
 }
 
 /** 目標の高さの線 */
@@ -97,10 +103,7 @@ function drawGoalLine(ctx: CanvasRenderingContext2D, v: Viewport, w: number, goa
   ctx.strokeStyle = '#2e9d55';
   ctx.lineWidth = 3;
   ctx.setLineDash([12, 8]);
-  ctx.beginPath();
-  ctx.moveTo(0, sy);
-  ctx.lineTo(w, sy);
-  ctx.stroke();
+  strokeLine(ctx, { sx: 0, sy }, { sx: w, sy });
   ctx.setLineDash([]);
   // 緑の札に「目標 ○m」
   const label = `目標 ${goalHeight}m`;
@@ -227,12 +230,9 @@ function drawWind(ctx: CanvasRenderingContext2D, v: Viewport, speed: number): vo
   const left = toScreen(v, VIEW.minX + 0.5, 0).sx;
   for (let y = 2; y < VIEW.maxY; y += 3) {
     // 高い所ほど風が強い
-    const len = Math.min(5, (speed / 10) * Math.pow(Math.max(y, 1) / 10, 0.4)) * v.scale;
+    const len = Math.min(5, (speed / 10) * windHeightFactor(y)) * v.scale;
     const { sy } = toScreen(v, 0, y);
-    ctx.beginPath();
-    ctx.moveTo(left, sy);
-    ctx.lineTo(left + len, sy);
-    ctx.stroke();
+    strokeLine(ctx, { sx: left, sy }, { sx: left + len, sy });
     ctx.beginPath();
     ctx.moveTo(left + len + 8, sy);
     ctx.lineTo(left + len - 2, sy - 6);
@@ -266,23 +266,14 @@ export function drawDesign(
 
   ctx.lineCap = 'round';
   design.members.forEach((m, i) => {
-    const a = toScreen(v, design.nodes[m.a].x, design.nodes[m.a].y);
-    const b = toScreen(v, design.nodes[m.b].x, design.nodes[m.b].y);
     ctx.strokeStyle = i === hoverMember ? '#d93a2b' : MATERIALS[m.material].color;
     ctx.lineWidth = memberWidth(v);
-    ctx.beginPath();
-    ctx.moveTo(a.sx, a.sy);
-    ctx.lineTo(b.sx, b.sy);
-    ctx.stroke();
+    strokeLine(ctx, screenOf(v, design.nodes[m.a]), screenOf(v, design.nodes[m.b]));
   });
 
   for (const n of design.nodes) {
-    const p = toScreen(v, n.x, n.y);
-    if (n.y <= 0) {
-      // 基礎
-      ctx.fillStyle = '#5b4a33';
-      ctx.fillRect(p.sx - 9, p.sy - 2, 18, 8);
-    }
+    const p = screenOf(v, n);
+    if (n.y <= 0) drawFoundation(ctx, p);
     drawNodeDot(ctx, p.sx, p.sy, '#ffffff', '#3c4450');
   }
 
@@ -293,10 +284,7 @@ export function drawDesign(
     ctx.strokeStyle = preview.ok ? preview.color : '#d93a2b';
     ctx.lineWidth = memberWidth(v);
     ctx.setLineDash(preview.ok ? [] : [8, 6]);
-    ctx.beginPath();
-    ctx.moveTo(a.sx, a.sy);
-    ctx.lineTo(b.sx, b.sy);
-    ctx.stroke();
+    strokeLine(ctx, a, b);
     ctx.setLineDash([]);
     ctx.globalAlpha = 1;
     drawNodeDot(ctx, b.sx, b.sy, '#ffffff', '#3c4450');
@@ -307,9 +295,7 @@ export function drawDesign(
 
   if (pinMember !== null && design.members[pinMember]) {
     const m = design.members[pinMember];
-    const a = design.nodes[m.a];
-    const b = design.nodes[m.b];
-    const p = toScreen(v, (a.x + b.x) / 2, (a.y + b.y) / 2);
+    const p = screenOf(v, midpoint(design.nodes[m.a], design.nodes[m.b]));
     drawPin(ctx, p.sx, p.sy, 'わたしの予想', PREDICT_COLOR);
   }
 }
@@ -321,6 +307,12 @@ export interface WorldMarks {
   firstBreak?: FirstBreak | null;
   /** 0〜1 の点滅の強さ */
   pulse?: number;
+}
+
+/** 部材のまん中の、いまの位置 */
+function memberMidpoint(world: World, index: number) {
+  const m = world.members[index];
+  return midpoint(world.nodes[m.a], world.nodes[m.b]);
 }
 
 /** 地震中の建物を、部材にかかる力の色で描く */
@@ -340,15 +332,10 @@ export function drawWorld(
   ctx.lineCap = 'round';
   for (const m of world.members) {
     if (m.broken) continue;
-    const a = toScreen(v, world.nodes[m.a].x, world.nodes[m.a].y);
-    const b = toScreen(v, world.nodes[m.b].x, world.nodes[m.b].y);
     // 外側に材料の色、内側に力の色
     ctx.strokeStyle = m.material.color;
     ctx.lineWidth = memberWidth(v);
-    ctx.beginPath();
-    ctx.moveTo(a.sx, a.sy);
-    ctx.lineTo(b.sx, b.sy);
-    ctx.stroke();
+    strokeLine(ctx, screenOf(v, world.nodes[m.a]), screenOf(v, world.nodes[m.b]));
     ctx.strokeStyle = stressColor(memberStressRatio(m));
     ctx.lineWidth = memberWidth(v) * 0.5;
     ctx.stroke();
@@ -363,11 +350,8 @@ export function drawWorld(
     worst.set(j.node, cur);
   }
   world.nodes.forEach((n, i) => {
-    const p = toScreen(v, n.x, n.y);
-    if (n.support) {
-      ctx.fillStyle = '#5b4a33';
-      ctx.fillRect(p.sx - 9, p.sy - 2, 18, 8);
-    }
+    const p = screenOf(v, n);
+    if (n.support) drawFoundation(ctx, p);
     const info = worst.get(i);
     if (!info) {
       drawNodeDot(ctx, p.sx, p.sy, '#ffffff', '#3c4450');
@@ -392,24 +376,14 @@ export function drawWorld(
 
   const fb = marks.firstBreak;
   if (fb && world.time >= fb.time) {
-    let px: number;
-    let py: number;
-    if (fb.kind === 'joint') {
-      px = world.nodes[fb.node].x;
-      py = world.nodes[fb.node].y;
-    } else {
-      const m = world.members[fb.index];
-      px = (world.nodes[m.a].x + world.nodes[m.b].x) / 2;
-      py = (world.nodes[m.a].y + world.nodes[m.b].y) / 2;
-    }
-    const p = toScreen(v, px, py);
+    const at = fb.kind === 'joint' ? world.nodes[fb.node] : memberMidpoint(world, fb.index);
+    const p = screenOf(v, at);
     drawBreakRing(ctx, p.sx, p.sy, marks.pulse ?? 0);
   }
 
   const pm = marks.predictMember;
   if (pm !== null && pm !== undefined && world.members[pm]) {
-    const m = world.members[pm];
-    const p = toScreen(v, (world.nodes[m.a].x + world.nodes[m.b].x) / 2, (world.nodes[m.a].y + world.nodes[m.b].y) / 2);
+    const p = screenOf(v, memberMidpoint(world, pm));
     drawPin(ctx, p.sx, p.sy, '予想', PREDICT_COLOR);
   }
 }
