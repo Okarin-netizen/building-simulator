@@ -1,4 +1,4 @@
-// ステージ（依頼）の定義。授業で使う第1・2章と、最高タワーチャレンジ。
+// ステージ（依頼）の定義。授業で使う第1・2章と最高タワーチャレンジ、発展の第3〜6章。
 // 数値を変えたら stages.test.ts で「解ける」「工夫しないと解けない」が保たれているか確かめる。
 
 import { addMember, emptyDesign, frameDesign, type Design } from '../physics/design';
@@ -49,16 +49,7 @@ export function wideTower(floors: number, bays: number, material: MaterialId = '
 
 /** 階ごとに材料を指定した、筋交い入りの枠 */
 export function bracedTower(materials: MaterialId[], width = 4): Design {
-  const d = emptyDesign();
-  materials.forEach((m, f) => {
-    const y0 = f * 3;
-    const y1 = y0 + 3;
-    addMember(d, 0, y0, 0, y1, m);
-    addMember(d, width, y0, width, y1, m);
-    addMember(d, 0, y1, width, y1, m);
-    addMember(d, f % 2 === 0 ? 0 : width, y0, f % 2 === 0 ? width : 0, y1, m);
-  });
-  return d;
+  return frameDesign({ floors: materials.length, floorMaterials: materials, width, braced: true });
 }
 
 export const STAGES: Stage[] = [

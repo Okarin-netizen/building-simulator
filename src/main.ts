@@ -4,6 +4,7 @@ import { addMember, designCost, designHeight, emptyDesign, frameDesign, removeMe
 import { MATERIALS, MATERIAL_IDS, type MaterialId } from './physics/materials';
 import { groundOffset, makeQuake, QUAKE_LEVELS, QUAKE_TYPES, type QuakeLevel, type QuakeType } from './physics/quake';
 import { createWorld, SETTLE_TIME, step, type World } from './physics/world';
+import { distanceToSegment } from './physics/geometry';
 import { canStartTest, evaluate } from './game/evaluate';
 import { judgePrediction, describeMember, type Prediction } from './game/predict';
 import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
@@ -687,14 +688,6 @@ function snap(p: { x: number; y: number }): { x: number; y: number } {
     x: Math.max(Math.ceil(VIEW.minX), Math.min(Math.floor(VIEW.maxX), Math.round(p.x))),
     y: Math.max(0, Math.min(VIEW.maxY - 1, Math.round(p.y))),
   };
-}
-
-function distanceToSegment(p: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }): number {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len2 = dx * dx + dy * dy || 1e-9;
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2));
-  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
 function memberAt(p: { x: number; y: number }): number | null {
