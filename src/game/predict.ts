@@ -107,6 +107,13 @@ export function storyMaterial(design: Design, floor: number): MaterialId | null 
   return best;
 }
 
+/** その階より上に、鉄筋コンクリートの階があるか */
+function heavierAbove(design: Design, floor: number): boolean {
+  const top = Math.round(Math.max(0, ...design.nodes.map((n) => n.y)) / STORY);
+  for (let f = floor + 1; f <= top; f++) if (storyMaterial(design, f) === 'concrete') return true;
+  return false;
+}
+
 /** 最初にこわれた所が何階か（つなぎ目は、その高さを床にする階の下の階） */
 function breakFloor(design: Design, fb: FirstBreak): number {
   if (fb.kind === 'member') {
@@ -131,7 +138,9 @@ export function breakAdvice(design: Design, fb: FirstBreak | null): string | nul
   const below = floor >= 2 ? storyMaterial(design, floor - 1) : null;
   if (here && below && here !== below)
     return `材料が切りかわったすぐ上の${floor}階がこわれました。下の階だけが急にかたいと、すぐ上の階に揺れの力が集まりやすくなります。強い材料の階を1つ増やすか減らして、切りかわる場所を変えてみよう。`;
+  if (here !== 'concrete' && heavierAbove(design, floor))
+    return `上の階の鉄筋コンクリートの重さが、${floor}階にのしかかりました。鉄筋コンクリートは押す力に強いので、重さを支える下の階に使い、上の階は軽い材料にしてみよう。`;
   if (here === 'concrete')
-    return '鉄筋コンクリートは安くて押す力に強い一方、とても重く、ねばりが少ない（曲がる前にこわれやすい）材料です。重い建物ほど地震の力を多く受けます。';
+    return '鉄筋コンクリートは押す力に強く安い材料ですが、とても重く、ねばりが少ない（曲がる前にこわれやすい）材料です。重い建物ほど地震の力を多く受けるので、上の階は軽い材料にしてみよう。';
   return null;
 }

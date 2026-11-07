@@ -217,7 +217,8 @@ function buildMaterialButtons(): void {
       'note' in t
         ? `<span class="traits">${escapeHtml(t.note)}</span>`
         : `<span class="traits">強さ${dots(t.strength)} 重さ${dots(t.weight)} ねばり${dots(t.toughness)}</span>`;
-    b.innerHTML = `<span class="mat-top"><span class="swatch" style="background:${m.color}"></span>${m.name}<span class="price">${m.costPerMeter}万円/m</span></span>${traits}`;
+    const merit = m.merit ? `<span class="merit">${escapeHtml(m.merit)}</span>` : '';
+    b.innerHTML = `<span class="mat-top"><span class="swatch" style="background:${m.color}"></span>${m.name}<span class="price">${m.costPerMeter}万円/m</span></span>${traits}${merit}`;
     b.addEventListener('click', () => {
       material = id;
       refreshPanel();

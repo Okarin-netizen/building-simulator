@@ -223,6 +223,16 @@ button.go:active:not(:disabled) {
   letter-spacing: 0.5px;
 }
 
+.materials .merit {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--quiet);
+}
+
+.materials button.active .merit {
+  color: var(--ink);
+}
+
 .materials .traits .off {
   color: var(--line);
 }

@@ -249,7 +249,7 @@ function applyMemberForces(world: World): void {
     const ux = dx / len;
     const uy = dy / len;
     m.strain = (len - m.rest) / m.rest;
-    if (Math.abs(m.strain) > m.material.breakStrain) {
+    if (memberStressRatio(m) > 1) {
       m.broken = true;
       world.firstBreak ??= { kind: 'member', index: world.members.indexOf(m), time: world.time };
       continue;
@@ -433,7 +433,12 @@ export function brokenCount(world: World): { members: number; joints: number } {
   };
 }
 
+/** 縮んでいる（押されている）か伸びている（引っぱられている）かで、折れる限界を選ぶ */
+export function breakStrainOf(material: Member['material'], strain: number): number {
+  return strain < 0 ? (material.compressBreakStrain ?? material.breakStrain) : material.breakStrain;
+}
+
 /** 部材にかかる力の強さ（0〜1以上）。色分けに使う */
 export function memberStressRatio(m: Member): number {
-  return Math.abs(m.strain) / m.material.breakStrain;
+  return Math.abs(m.strain) / breakStrainOf(m.material, m.strain);
 }
