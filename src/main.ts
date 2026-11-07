@@ -1,6 +1,6 @@
-// 画面の操作：ステージを選ぶ、部材を置く・消す、地震で試験する、結果を見る。
+// 画面の操作：ステージを選ぶ、部材を置く・選んで直す、地震で試験する、結果を見る。
 
-import { addMember, designCost, designHeight, emptyDesign, frameDesign, ISOLATION_COST_PER_BASE, removeMember, type Design } from './physics/design';
+import { addMember, designCost, designHeight, emptyDesign, frameDesign, ISOLATION_COST_PER_BASE, removeMember, setMemberMaterial, type Design } from './physics/design';
 import { MATERIALS, MATERIAL_IDS, type MaterialId } from './physics/materials';
 import { groundOffset, makeQuake, QUAKE_LEVELS, QUAKE_TYPES, TEST_DURATION, type QuakeLevel, type QuakeType } from './physics/quake';
 import { createWorld, SETTLE_TIME, step, type World } from './physics/world';
@@ -55,7 +55,7 @@ const sheet = $<HTMLDivElement>('sheet');
 let stage: Stage | null = null;
 let design: Design = emptyDesign();
 let material: MaterialId = 'wood';
-let tool: 'place' | 'erase' | 'load' = 'place';
+let tool: 'place' | 'load' = 'place';
 /** build：組み立て / predict：予想 / test：試験中 / result：結果 / replay：再生 */
 type Phase = 'build' | 'predict' | 'test' | 'result' | 'replay';
 let phase: Phase = 'build';
@@ -78,6 +78,8 @@ let cssHeight = 1;
 let dragStart: { x: number; y: number } | null = null;
 let dragEnd: { x: number; y: number } | null = null;
 let hoverMember: number | null = null;
+/** タップで選んだ部材（材料を変える・消す）。設計図の形が変わったら選びなおし */
+let selectedMember: number | null = null;
 
 const designId = () => stage?.id ?? FREE_ID;
 const goalHeight = () => stage?.goalHeight ?? 0;
@@ -96,6 +98,7 @@ function closeOnBackdrop(dialog: HTMLElement): void {
 
 function openStage(s: Stage | null): void {
   resetTest();
+  selectMember(null);
   stage = s;
   design = loadDesign(designId()) ?? (s ? s.initial() : frameDesign({ floors: 3 }));
   undoStack = [];
@@ -107,11 +110,13 @@ function openStage(s: Stage | null): void {
   $('stage-no').textContent = s ? stageLabel(s) : '実験';
   const loadBtn = $<HTMLButtonElement>('tool-load');
   loadBtn.hidden = !s?.load;
+  // 「部材を置く」は、機械を置くステージで道具を切りかえるときだけ出す
+  $('tool-place').hidden = !s?.load;
   if (s?.load) loadBtn.textContent = `${s.load.name}を置く`;
   if (!s?.load && tool === 'load') tool = 'place';
   $('stage-name').textContent = s ? s.title : '自由に作る';
   $('request').textContent = s ? s.request : '好きな形・材料で建てて、地震の強さや揺れ方を変えて試してみよう。';
-  hint.textContent = '点から点へドラッグして部材を置こう。地面の線につながった所が基礎（きそ）になります。';
+  hint.textContent = '点から点へドラッグして部材を置こう。置いた部材はタップすると、材料を変えたり消したりできます。';
   $('stage-tools').hidden = !s;
   $('samples').hidden = !!s;
   $('quake-choice').hidden = !!s;
@@ -150,6 +155,7 @@ function undo(): void {
     return;
   }
   design = JSON.parse(prev);
+  selectMember(null);
   persist();
   refreshPanel();
   hint.textContent = '1つ前に戻しました。';
@@ -228,8 +234,8 @@ typeSelect.value = 'mixed';
 document.querySelectorAll<HTMLButtonElement>('.tool').forEach((b) =>
   b.addEventListener('click', () => {
     tool = b.dataset.tool as typeof tool;
+    selectMember(null);
     refreshPanel();
-    if (tool === 'erase') hint.textContent = '消したい部材をタップしよう。置くときは「部材を置く」にもどしてね。';
     if (tool === 'place') hint.textContent = '点から点へドラッグして部材を置こう。';
   }),
 );
@@ -238,6 +244,7 @@ function setDesign(d: Design): void {
   if (phase !== 'build') return;
   remember();
   design = d;
+  selectMember(null);
   persist();
   refreshPanel();
 }
@@ -308,6 +315,7 @@ function startPredict(): void {
     hint.textContent = can.reason!;
     return;
   }
+  selectMember(null);
   phase = 'predict';
   prediction = null;
   updatePredictBox();
@@ -877,7 +885,7 @@ const lengthOk = (a: { x: number; y: number }, b: { x: number; y: number }) =>
 
 /** 指（またはペン）で触っている間の、指の画面上の位置。ルーペを出すのに使う。マウスのときは null */
 let aim: { sx: number; sy: number; world: { x: number; y: number } } | null = null;
-/** 画面を押している間 true（「消す」と「予想」は、指をはなした所の部材に決める） */
+/** 画面を押している間 true（「予想」は、指をはなした所の部材に決める） */
 let pressing = false;
 /** 押している指が指・ペンかどうか */
 let pressTouch = false;
@@ -898,24 +906,95 @@ function endPress(): void {
   aim = null;
   dragStart = null;
   dragEnd = null;
-  if (tool === 'erase' && phase === 'build') hoverMember = null;
+  pressAt = null;
 }
 
-function eraseMember(i: number | null): void {
-  if (i !== null) {
-    remember();
-    const hadLoad = (design.loads?.length ?? 0) > 0;
-    removeMember(design, i);
-    persist();
-    refreshPanel();
-    hint.textContent =
-      hadLoad && !design.loads?.length && stage?.load
-        ? `床がなくなったので、${stage.load.name}を外しました。「${stage.load.name}を置く」で置き直そう。`
-        : '部材を消しました。置くときは「部材を置く」にもどしてね。';
-  } else {
-    hint.textContent = 'いまは「部材を消す」になっています。部材を置くときは「部材を置く」を選ぼう。';
-  }
+// ---------- 置いた部材を選んで直す ----------
+
+const selectBox = $<HTMLDivElement>('select-box');
+const selectMats = $<HTMLDivElement>('select-mats');
+
+/** 部材を選ぶ（null で選ぶのをやめる）。選んだら、材料を変える・消すの札を出す */
+function selectMember(i: number | null): void {
+  selectedMember = i !== null && design.members[i] ? i : null;
+  updateSelectBox();
 }
+
+function updateSelectBox(): void {
+  const i = selectedMember;
+  selectBox.hidden = i === null || phase !== 'build';
+  if (i === null) return;
+  const m = design.members[i];
+  const a = design.nodes[m.a];
+  const b = design.nodes[m.b];
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  const shown = Number.isInteger(len) ? `${len}` : len.toFixed(1);
+  $('select-title').textContent = `選んだ部材：${describeMember(design, i)}　長さ ${shown} m`;
+  selectMats.innerHTML = '';
+  for (const id of allowedMaterials()) {
+    const info = MATERIALS[id];
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.classList.toggle('active', m.material === id);
+    btn.innerHTML = `<span class="swatch" style="background:${info.color}"></span>${info.name}`;
+    btn.addEventListener('click', () => changeSelectedMaterial(id));
+    selectMats.appendChild(btn);
+  }
+  // 札が選んだ部材にかぶらないよう、部材が上半分にあれば札を下に出す
+  const mid = toScreen(viewport, (a.x + b.x) / 2, (a.y + b.y) / 2);
+  selectBox.classList.toggle('bottom', mid.sy < cssHeight / 2);
+}
+
+function changeSelectedMaterial(id: MaterialId): void {
+  const i = selectedMember;
+  if (i === null || phase !== 'build' || design.members[i].material === id) return;
+  remember();
+  setMemberMaterial(design, i, id);
+  persist();
+  refreshPanel();
+  updateSelectBox();
+  const over = stage && designCost(design) > stage.budget;
+  hint.textContent = over
+    ? `${MATERIALS[id].name}に変えました。予算オーバーです。`
+    : `${MATERIALS[id].name}に変えました。`;
+}
+
+function deleteSelected(): void {
+  const i = selectedMember;
+  if (i === null || phase !== 'build') return;
+  remember();
+  const hadLoad = (design.loads?.length ?? 0) > 0;
+  removeMember(design, i);
+  selectMember(null);
+  persist();
+  refreshPanel();
+  fitView();
+  hint.textContent =
+    hadLoad && !design.loads?.length && stage?.load
+      ? `床がなくなったので、${stage.load.name}を外しました。「${stage.load.name}を置く」で置き直そう。`
+      : '部材を消しました。';
+}
+
+$('select-delete').addEventListener('click', deleteSelected);
+$('select-close').addEventListener('click', () => {
+  selectMember(null);
+  hint.textContent = '';
+});
+window.addEventListener('keydown', (e) => {
+  if (phase !== 'build' || selectedMember === null) return;
+  if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    e.preventDefault();
+    deleteSelected();
+  } else if (e.key === 'Escape') {
+    selectMember(null);
+  }
+});
+
+/** 押し始めた所（画面の位置と、方眼の位置）。タップ（ほとんど動かさずにはなす）かどうかを見分ける */
+let pressAt: { sx: number; sy: number; world: { x: number; y: number } } | null = null;
+/** これより動かさずにはなしたら「タップ」（画面の px） */
+const TAP_SLOP = { mouse: 6, touch: 12 };
 
 function choosePrediction(p: { x: number; y: number }): void {
   const i = memberAt(p);
@@ -944,11 +1023,9 @@ canvas.addEventListener('pointerdown', (e) => {
     endPress();
     return;
   }
-  if (tool === 'erase') {
-    // 押している間は消す部材を赤く示し、指をはなしたときに消す（指の下にかくれても、ルーペで確かめられる）
-    hoverMember = memberAt(p);
-    return;
-  }
+  // 「タップ＝選ぶ」「ドラッグ＝置く」。どちらになるかは、指をはなしたときに決める
+  const rect = canvas.getBoundingClientRect();
+  pressAt = { sx: e.clientX - rect.left, sy: e.clientY - rect.top, world: p };
   dragStart = snapFor(p);
   dragEnd = dragStart;
 });
@@ -963,19 +1040,20 @@ canvas.addEventListener('pointermove', (e) => {
     else hoverMember = memberAt(p);
     return;
   }
-  hoverMember = tool === 'erase' ? memberAt(p) : null;
+  hoverMember = null;
   if (dragStart) dragEnd = snapFor(p);
 });
 
 canvas.addEventListener('pointerup', (e) => {
   if (!e.isPrimary) return;
-  if (phase === 'build' && tool === 'erase' && pressing) {
-    eraseMember(memberAt(eventPoint(e)));
-  }
-  if (dragStart && dragEnd) {
+  if (dragStart && dragEnd && pressAt && isTap(e, pressAt, dragStart, dragEnd)) {
+    tapAt(pressAt.world);
+  } else if (dragStart && dragEnd) {
     if (lengthOk(dragStart, dragEnd)) {
       remember();
       addMember(design, dragStart.x, dragStart.y, dragEnd.x, dragEnd.y, material);
+      // 部材が分かれて番号が変わることがあるので、選んでいた部材は選びなおし
+      selectMember(null);
       persist();
       refreshPanel();
       fitView();
@@ -1001,12 +1079,41 @@ canvas.addEventListener('pointerleave', (e) => {
   if (e.pointerType === 'mouse') hoverMember = null;
 });
 
+/** ほとんど動かさずにはなしたか（点がずれていない、または指のぶれ程度しか動いていない） */
+function isTap(
+  e: PointerEvent,
+  at: { sx: number; sy: number },
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+): boolean {
+  if (a.x === b.x && a.y === b.y) return true;
+  const rect = canvas.getBoundingClientRect();
+  const moved = Math.hypot(e.clientX - rect.left - at.sx, e.clientY - rect.top - at.sy);
+  return moved < (e.pointerType === 'mouse' ? TAP_SLOP.mouse : TAP_SLOP.touch);
+}
+
+/** 組み立て中のタップ：部材の上なら選ぶ（同じ部材なら選ぶのをやめる）、何もない所なら選ぶのをやめる */
+function tapAt(p: { x: number; y: number }): void {
+  const i = memberAt(p);
+  if (i === null) {
+    if (selectedMember !== null) hint.textContent = '';
+    selectMember(null);
+    return;
+  }
+  if (i === selectedMember) {
+    selectMember(null);
+    hint.textContent = '';
+    return;
+  }
+  selectMember(i);
+  hint.textContent = '材料を変えるか、消すかを選ぼう。新しく置くときは、点から点へドラッグ。';
+}
+
 /** ルーペの下に出す一言 */
 function aimLabel(): { text: string | null; ok: boolean } {
   if (phase === 'predict') {
     return { text: hoverMember !== null ? 'この部材を予想' : null, ok: true };
   }
-  if (tool === 'erase') return { text: hoverMember !== null ? 'はなすと消す' : '部材がない', ok: hoverMember !== null };
   if (dragStart && dragEnd) {
     const len = Math.hypot(dragEnd.x - dragStart.x, dragEnd.y - dragStart.y);
     if (len === 0) return { text: '始まりの点', ok: true };
@@ -1100,7 +1207,7 @@ function frame(now: number): void {
         ? { x1: dragStart.x, y1: dragStart.y, x2: dragEnd.x, y2: dragEnd.y, color: MATERIALS[material].color, ok: lengthOk(dragStart, dragEnd) }
         : null;
     const pin = phase === 'predict' && prediction?.kind === 'member' ? prediction.index : null;
-    drawDesign(ctx, viewport, cssWidth, cssHeight, design, preview, hoverMember, goalHeight(), pin);
+    drawDesign(ctx, viewport, cssWidth, cssHeight, design, preview, hoverMember, goalHeight(), pin, phase === 'build' ? selectedMember : null);
     if (aim) {
       // 指の下にかくれた所を、指からはなれたルーペに映す
       const focus = phase === 'build' && tool === 'place' && dragEnd ? dragEnd : aim.world;

@@ -613,6 +613,55 @@ canvas {
   margin-top: 4px;
 }
 
+/* ---------- 置いた部材を選んで直す ---------- */
+
+.select-box {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  width: min(380px, calc(100% - 32px));
+  padding: 12px 14px;
+  background: var(--yellow-soft);
+  border: 3px solid var(--ink);
+  border-radius: 14px;
+  box-shadow: 0 5px 0 var(--ink);
+}
+
+.select-box.bottom {
+  top: auto;
+  bottom: 20px;
+}
+
+.select-box[hidden] {
+  display: none;
+}
+
+.select-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.select-mats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.select-mats button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+}
+
+.select-box button.danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+
 /* ---------- スロー再生 ---------- */
 
 .replay-bar {
@@ -1059,6 +1108,52 @@ canvas {
   }
   .legend-box p {
     display: none;
+  }
+  .select-box {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    width: auto;
+    padding: 8px 10px;
+    border-radius: 12px;
+    box-shadow: 0 4px 0 var(--ink);
+  }
+  .select-box.bottom {
+    top: auto;
+    bottom: 8px;
+  }
+  .select-title {
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  /* せまい画面では、材料と「消す」「やめる」を1つの並びにまとめて、札を低くする */
+  .select-box {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .select-box[hidden] {
+    display: none;
+  }
+  .select-mats,
+  .select-box .buttons {
+    display: contents;
+  }
+  .select-title {
+    flex: 1 1 100%;
+    margin-bottom: 0;
+  }
+  .select-mats button {
+    flex: 0 1 auto;
+    gap: 4px;
+  }
+  .select-mats .swatch {
+    width: 12px;
+  }
+  .select-box button {
+    min-height: 38px;
+    padding: 2px 8px;
+    font-size: 12px;
   }
   .predict-box,
   .result,

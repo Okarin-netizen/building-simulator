@@ -286,12 +286,25 @@ export function drawDesign(
   hoverMember: number | null,
   goalHeight = 0,
   pinMember: number | null = null,
+  selectedMember: number | null = null,
 ): void {
   drawBackground(ctx, v, w, h, 0);
   drawGridDots(ctx, v);
   drawGoalLine(ctx, v, w, goalHeight);
 
   ctx.lineCap = 'round';
+  if (selectedMember !== null && design.members[selectedMember]) {
+    // 選んだ部材は、黒ふちの黄色い光で囲んで目立たせる
+    const m = design.members[selectedMember];
+    const a = screenOf(v, design.nodes[m.a]);
+    const b = screenOf(v, design.nodes[m.b]);
+    ctx.strokeStyle = '#1f1f1f';
+    ctx.lineWidth = memberWidth(v) + 14;
+    strokeLine(ctx, a, b);
+    ctx.strokeStyle = '#f6c343';
+    ctx.lineWidth = memberWidth(v) + 9;
+    strokeLine(ctx, a, b);
+  }
   design.members.forEach((m, i) => {
     ctx.strokeStyle = i === hoverMember ? '#d93a2b' : MATERIALS[m.material].color;
     ctx.lineWidth = memberWidth(v);

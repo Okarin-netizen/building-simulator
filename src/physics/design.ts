@@ -95,6 +95,12 @@ export function addMember(design: Design, x1: number, y1: number, x2: number, y2
   for (let k = 0; k + 1 < chain.length; k++) connect(design, chain[k], chain[k + 1], material);
 }
 
+/** 置いてある部材の材料を変える。長さやつなぎ目はそのまま */
+export function setMemberMaterial(design: Design, index: number, material: MaterialId): void {
+  const m = design.members[index];
+  if (m) m.material = material;
+}
+
 /** 部材を消し、どの部材にもつながらない節点を片付ける */
 export function removeMember(design: Design, index: number): void {
   design.members.splice(index, 1);
