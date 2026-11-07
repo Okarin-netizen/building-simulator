@@ -414,3 +414,140 @@ export function drawWorld(
     drawPin(ctx, p.sx, p.sy, '予想', PREDICT_COLOR);
   }
 }
+
+// ---------- 指で操作するときの手助け ----------
+
+/** ルーペの大きさ（半径 px）と、指からはなす距離（px） */
+export const LOUPE = { radius: 58, gap: 34 };
+
+/**
+ * ルーペを出す位置：ふつうは指の真上。上に場所がなければ、指の左か右に出す。
+ * （指の下にかくれない所に出すのが目的）
+ */
+export function loupeCenter(fingerX: number, fingerY: number, w: number, h: number): { x: number; y: number } {
+  const r = LOUPE.radius;
+  const off = r + LOUPE.gap;
+  const clampX = (x: number) => Math.max(r + 4, Math.min(w - r - 4, x));
+  const clampY = (y: number) => Math.max(r + 4, Math.min(h - r - 4, y));
+  if (fingerY - off - r >= 0) return { x: clampX(fingerX), y: fingerY - off };
+  // 上に入らないときは横へ（画面の広い側）
+  const x = fingerX + off + r <= w || fingerX < w / 2 ? fingerX + off : fingerX - off;
+  return { x: clampX(x), y: clampY(fingerY) };
+}
+
+/** ルーペの倍率：方眼の1マスがルーペの中で 30px 以上になるように（2〜4倍） */
+export const loupeZoom = (v: Viewport) => Math.max(2, Math.min(4, 30 / v.scale));
+
+/** いま指している点（スナップした先）を、大きな輪で目立たせる */
+export function drawAimRing(ctx: CanvasRenderingContext2D, v: Viewport, p: { x: number; y: number }, color = '#e8452c'): void {
+  const s = screenOf(v, p);
+  const r = Math.max(9, v.scale * 0.55);
+  ctx.save();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(s.sx, s.sy, r + 1.5, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.beginPath();
+  ctx.arc(s.sx, s.sy, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+let loupeBuffer: HTMLCanvasElement | null = null;
+
+/**
+ * 指でかくれた所を、指からはなれた丸い窓に拡大して映す。
+ * focus（スナップした点）を中心に映し、まん中に照準を描く。label は窓の下に出す一言（部材の長さなど）。
+ */
+export function drawLoupe(
+  ctx: CanvasRenderingContext2D,
+  v: Viewport,
+  w: number,
+  h: number,
+  focus: { x: number; y: number },
+  finger: { sx: number; sy: number },
+  label: string | null,
+  ok = true,
+): void {
+  const source = ctx.canvas;
+  const dpr = source.width / Math.max(1, w);
+  const r = LOUPE.radius;
+  const zoom = loupeZoom(v);
+  const f = screenOf(v, focus);
+  const half = r / zoom;
+
+  // いまの絵を、いったん別の紙に写してから拡大する（同じキャンバスへの直接の写しは避ける）
+  const size = Math.max(1, Math.round(half * 2 * dpr));
+  loupeBuffer ??= document.createElement('canvas');
+  if (loupeBuffer.width !== size || loupeBuffer.height !== size) {
+    loupeBuffer.width = size;
+    loupeBuffer.height = size;
+  }
+  const bctx = loupeBuffer.getContext('2d')!;
+  bctx.fillStyle = '#dfeef7';
+  bctx.fillRect(0, 0, size, size);
+  bctx.drawImage(source, (f.sx - half) * dpr, (f.sy - half) * dpr, size, size, 0, 0, size, size);
+
+  const c = loupeCenter(finger.sx, finger.sy, w, h);
+  ctx.save();
+  // 影
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+  ctx.beginPath();
+  ctx.arc(c.x + 2, c.y + 4, r + 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(loupeBuffer, c.x - r, c.y - r, r * 2, r * 2);
+  // 照準（スナップした点）
+  const color = ok ? '#e8452c' : '#8a1c12';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(c.x - r, c.y);
+  ctx.lineTo(c.x - 12, c.y);
+  ctx.moveTo(c.x + 12, c.y);
+  ctx.lineTo(c.x + r, c.y);
+  ctx.moveTo(c.x, c.y - r);
+  ctx.lineTo(c.x, c.y - 12);
+  ctx.moveTo(c.x, c.y + 12);
+  ctx.lineTo(c.x, c.y + r);
+  ctx.stroke();
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, 9, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+
+  // 縁取り（工事現場の黄色と黒）
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = '#1f1f1f';
+  ctx.beginPath();
+  ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = '#f6c343';
+  ctx.stroke();
+
+  if (label) {
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    const tw = ctx.measureText(label).width + 14;
+    const ly = c.y + r - 4;
+    ctx.fillStyle = ok ? '#1f1f1f' : '#b3261e';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(c.x - tw / 2, ly - 10, tw, 22, 11);
+    else ctx.rect(c.x - tw / 2, ly - 10, tw, 22);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, c.x, ly + 1);
+  }
+  ctx.restore();
+}

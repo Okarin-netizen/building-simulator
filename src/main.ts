@@ -27,7 +27,7 @@ import {
 } from './game/progress';
 import { APP_LICENSE, AUTHOR, CHANGELOG, MIT_TEXT, THIRD_PARTY } from './game/about';
 import { CHAPTER_NAMES, nextStage, stageById, stageFullTitle, stageLabel, STAGES, type Stage } from './game/stages';
-import { drawDesign, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
+import { drawAimRing, drawDesign, drawLoupe, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
 
 const FREE_ID = 'free';
 
@@ -840,6 +840,24 @@ function snap(p: { x: number; y: number }): { x: number; y: number } {
   };
 }
 
+/**
+ * 指で置くときのスナップ：近くに今あるつなぎ目があれば、そこに吸いつける。
+ * 指は点よりずっと太いので、方眼の半マスより広く（画面で 22px まで）吸いつけて、つなぎ損ねを防ぐ。
+ */
+function snapTouch(p: { x: number; y: number }): { x: number; y: number } {
+  const reach = Math.max(0.5, 22 / viewport.scale);
+  let best: { x: number; y: number } | null = null;
+  let bestD = reach;
+  for (const n of design.nodes) {
+    const d = Math.hypot(n.x - p.x, n.y - p.y);
+    if (d < bestD && n.y < viewport.maxY) {
+      bestD = d;
+      best = { x: n.x, y: n.y };
+    }
+  }
+  return best ?? snap(p);
+}
+
 function memberAt(p: { x: number; y: number }): number | null {
   let best: number | null = null;
   // 指でもタップしやすいよう、画面で 14px 以内なら当たりにする
@@ -857,51 +875,103 @@ function memberAt(p: { x: number; y: number }): number | null {
 const lengthOk = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.hypot(b.x - a.x, b.y - a.y) <= MAX_MEMBER_LENGTH && (a.x !== b.x || a.y !== b.y);
 
-canvas.addEventListener('pointerdown', (e) => {
-  if (phase === 'predict') {
-    const i = memberAt(eventPoint(e));
-    if (i !== null) {
-      prediction = { kind: 'member', index: i };
-      updatePredictBox();
-    }
+/** 指（またはペン）で触っている間の、指の画面上の位置。ルーペを出すのに使う。マウスのときは null */
+let aim: { sx: number; sy: number; world: { x: number; y: number } } | null = null;
+/** 画面を押している間 true（「消す」と「予想」は、指をはなした所の部材に決める） */
+let pressing = false;
+/** 押している指が指・ペンかどうか */
+let pressTouch = false;
+
+function updateAim(e: PointerEvent): void {
+  if (e.pointerType === 'mouse' || !pressing) {
+    aim = null;
     return;
   }
-  if (phase !== 'build') return;
+  const rect = canvas.getBoundingClientRect();
+  aim = { sx: e.clientX - rect.left, sy: e.clientY - rect.top, world: eventPoint(e) };
+}
+
+const snapFor = (p: { x: number; y: number }) => (pressTouch ? snapTouch(p) : snap(p));
+
+function endPress(): void {
+  pressing = false;
+  aim = null;
+  dragStart = null;
+  dragEnd = null;
+  if (tool === 'erase' && phase === 'build') hoverMember = null;
+}
+
+function eraseMember(i: number | null): void {
+  if (i !== null) {
+    remember();
+    const hadLoad = (design.loads?.length ?? 0) > 0;
+    removeMember(design, i);
+    persist();
+    refreshPanel();
+    hint.textContent =
+      hadLoad && !design.loads?.length && stage?.load
+        ? `床がなくなったので、${stage.load.name}を外しました。「${stage.load.name}を置く」で置き直そう。`
+        : '部材を消しました。置くときは「部材を置く」にもどしてね。';
+  } else {
+    hint.textContent = 'いまは「部材を消す」になっています。部材を置くときは「部材を置く」を選ぼう。';
+  }
+}
+
+function choosePrediction(p: { x: number; y: number }): void {
+  const i = memberAt(p);
+  hoverMember = i;
+  if (i !== null) {
+    prediction = { kind: 'member', index: i };
+    updatePredictBox();
+  }
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  // 2本目の指（ピンチなど）は無視する
+  if (!e.isPrimary) return;
+  if (phase !== 'build' && phase !== 'predict') return;
   canvas.setPointerCapture(e.pointerId);
+  pressing = true;
+  pressTouch = e.pointerType !== 'mouse';
+  updateAim(e);
   const p = eventPoint(e);
+  if (phase === 'predict') {
+    choosePrediction(p);
+    return;
+  }
   if (tool === 'load') {
     placeLoad(p.y);
+    endPress();
     return;
   }
   if (tool === 'erase') {
-    const i = memberAt(p);
-    if (i !== null) {
-      remember();
-      const hadLoad = (design.loads?.length ?? 0) > 0;
-      removeMember(design, i);
-      persist();
-      refreshPanel();
-      hint.textContent =
-        hadLoad && !design.loads?.length && stage?.load
-          ? `床がなくなったので、${stage.load.name}を外しました。「${stage.load.name}を置く」で置き直そう。`
-          : '部材を消しました。置くときは「部材を置く」にもどしてね。';
-    } else {
-      hint.textContent = 'いまは「部材を消す」になっています。部材を置くときは「部材を置く」を選ぼう。';
-    }
+    // 押している間は消す部材を赤く示し、指をはなしたときに消す（指の下にかくれても、ルーペで確かめられる）
+    hoverMember = memberAt(p);
     return;
   }
-  dragStart = snap(p);
+  dragStart = snapFor(p);
   dragEnd = dragStart;
 });
 
 canvas.addEventListener('pointermove', (e) => {
+  if (!e.isPrimary) return;
   if (phase !== 'build' && phase !== 'predict') return;
+  updateAim(e);
   const p = eventPoint(e);
-  hoverMember = tool === 'erase' || phase === 'predict' ? memberAt(p) : null;
-  if (dragStart) dragEnd = snap(p);
+  if (phase === 'predict') {
+    if (pressing) choosePrediction(p);
+    else hoverMember = memberAt(p);
+    return;
+  }
+  hoverMember = tool === 'erase' ? memberAt(p) : null;
+  if (dragStart) dragEnd = snapFor(p);
 });
 
-canvas.addEventListener('pointerup', () => {
+canvas.addEventListener('pointerup', (e) => {
+  if (!e.isPrimary) return;
+  if (phase === 'build' && tool === 'erase' && pressing) {
+    eraseMember(memberAt(eventPoint(e)));
+  }
   if (dragStart && dragEnd) {
     if (lengthOk(dragStart, dragEnd)) {
       remember();
@@ -917,19 +987,35 @@ canvas.addEventListener('pointerup', () => {
       hint.textContent = `部材の長さは ${MAX_MEMBER_LENGTH} m までです。`;
     }
   }
-  dragStart = null;
-  dragEnd = null;
+  endPress();
+  if (e.pointerType !== 'mouse' && phase === 'predict') hoverMember = null;
 });
 
-// タッチが途中で取り消されたら（画面の端に指が出た、など）、置きかけの部材を捨てる
+// タッチが途中で取り消されたら（画面の端に指が出た、など）、置きかけの部材・消しかけの部材を捨てる
 canvas.addEventListener('pointercancel', () => {
-  dragStart = null;
-  dragEnd = null;
-});
-
-canvas.addEventListener('pointerleave', () => {
+  endPress();
   hoverMember = null;
 });
+
+canvas.addEventListener('pointerleave', (e) => {
+  if (e.pointerType === 'mouse') hoverMember = null;
+});
+
+/** ルーペの下に出す一言 */
+function aimLabel(): { text: string | null; ok: boolean } {
+  if (phase === 'predict') {
+    return { text: hoverMember !== null ? 'この部材を予想' : null, ok: true };
+  }
+  if (tool === 'erase') return { text: hoverMember !== null ? 'はなすと消す' : '部材がない', ok: hoverMember !== null };
+  if (dragStart && dragEnd) {
+    const len = Math.hypot(dragEnd.x - dragStart.x, dragEnd.y - dragStart.y);
+    if (len === 0) return { text: '始まりの点', ok: true };
+    const ok = lengthOk(dragStart, dragEnd);
+    const shown = Number.isInteger(len) ? `${len}` : len.toFixed(1);
+    return { text: ok ? `長さ ${shown} m` : `長すぎ（${MAX_MEMBER_LENGTH} m まで）`, ok };
+  }
+  return { text: null, ok: true };
+}
 
 /** 重いもの（機械など）を、タップした高さにいちばん近い床に置く */
 function placeLoad(y: number): void {
@@ -974,6 +1060,8 @@ const stageBox = document.querySelector<HTMLDivElement>('.stage')!;
 function frame(now: number): void {
   legend.hidden = phase !== 'test' && phase !== 'replay';
   stageBox.classList.toggle('replaying', phase === 'replay');
+  document.body.classList.toggle('predicting', phase === 'predict');
+  document.body.classList.toggle('replaying', phase === 'replay');
   const dt = Math.min(0.1, (now - lastFrameAt) / 1000);
   lastFrameAt = now;
   if (world && phase === 'test') {
@@ -1013,7 +1101,18 @@ function frame(now: number): void {
         : null;
     const pin = phase === 'predict' && prediction?.kind === 'member' ? prediction.index : null;
     drawDesign(ctx, viewport, cssWidth, cssHeight, design, preview, hoverMember, goalHeight(), pin);
+    if (aim) {
+      // 指の下にかくれた所を、指からはなれたルーペに映す
+      const focus = phase === 'build' && tool === 'place' && dragEnd ? dragEnd : aim.world;
+      const label = aimLabel();
+      drawLoupe(ctx, viewport, cssWidth, cssHeight, focus, aim, label.text, label.ok);
+    }
+    if (phase === 'build' && dragStart && dragEnd) {
+      drawAimRing(ctx, viewport, dragStart, '#1f1f1f');
+      if (dragEnd.x !== dragStart.x || dragEnd.y !== dragStart.y) drawAimRing(ctx, viewport, dragEnd);
+    }
   }
+  stageBox.classList.toggle('aiming', !!aim);
   requestAnimationFrame(frame);
 }
 
