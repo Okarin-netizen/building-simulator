@@ -1,4 +1,4 @@
-import { addMember, designCost, designHeight, emptyDesign, frameDesign, removeMember } from './design';
+import { addMember, designCost, designHeight, emptyDesign, frameDesign, removeMember, setMemberMaterial } from './design';
 import { groundOffset, makeQuake } from './quake';
 
 test('同じ2点に部材を置くと、増えずに材料が置き換わる', () => {
@@ -17,6 +17,17 @@ test('部材を消すと、どこにもつながらない節点も消える', ()
   removeMember(d, 1);
   expect(d.nodes).toHaveLength(2);
   expect(d.members[0]).toMatchObject({ a: 0, b: 1 });
+});
+
+test('置いた部材の材料をあとから変えると、形はそのままで費用が変わる', () => {
+  const d = frameDesign({ floors: 1, material: 'wood' });
+  const before = JSON.stringify({ nodes: d.nodes, ab: d.members.map((m) => [m.a, m.b]) });
+  const cost = designCost(d);
+  setMemberMaterial(d, 2, 'steel');
+  expect(d.members[2].material).toBe('steel');
+  expect(d.members.filter((m) => m.material === 'wood')).toHaveLength(2);
+  expect(JSON.stringify({ nodes: d.nodes, ab: d.members.map((m) => [m.a, m.b]) })).toBe(before);
+  expect(designCost(d)).toBeGreaterThan(cost);
 });
 
 test('費用は 長さ × 材料の単価、高さは一番上の節点', () => {

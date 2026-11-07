@@ -43,8 +43,7 @@
         <section>
           <h2>道具</h2>
           <div class="buttons">
-            <button type="button" class="tool active" data-tool="place">部材を置く</button>
-            <button type="button" class="tool" data-tool="erase">部材を消す</button>
+            <button type="button" class="tool active" data-tool="place" id="tool-place" hidden>部材を置く</button>
             <button type="button" id="undo">1つ戻す</button>
             <button type="button" class="tool" data-tool="load" id="tool-load" hidden>機械を置く</button>
             <button type="button" id="toggle-iso" hidden>免震ゴムを入れる</button>
@@ -108,6 +107,14 @@
           <p>丸はつなぎ目。赤い丸は曲がりすぎて危ない所、×はこわれた所。</p>
         </div>
         <canvas id="canvas"></canvas>
+        <div class="select-box" id="select-box" hidden>
+          <p class="select-title" id="select-title"></p>
+          <div class="select-mats" id="select-mats"></div>
+          <div class="buttons">
+            <button type="button" id="select-delete" class="danger">この部材を消す</button>
+            <button type="button" id="select-close">選ぶのをやめる</button>
+          </div>
+        </div>
         <div class="predict-box" id="predict-box" hidden>
           <h3>試験の前に予想しよう</h3>
           <p id="predict-text">いちばん先にこわれそうな部材をタップしてください。</p>
@@ -154,7 +161,8 @@
         <h2>遊び方</h2>
         <ol class="howto-steps">
           <li><b>依頼書を読む</b>　左上の依頼書に、目標の高さ・予算・地震の強さが書いてあります。</li>
-          <li><b>部材を置く</b>　方眼の<b>点から点へドラッグ</b>すると部材（ぶざい）が置けます（スマホは指でなぞる。指の上に出る丸いルーペで、点と長さを確かめよう）。地面の線につながった所が基礎（きそ）です。まちがえたら「1つ戻す」か「部材を消す」。</li>
+          <li><b>部材を置く</b>　方眼の<b>点から点へドラッグ</b>すると部材（ぶざい）が置けます（スマホは指でなぞる。指の上に出る丸いルーペで、点と長さを確かめよう）。地面の線につながった所が基礎（きそ）です。まちがえたら「1つ戻す」。</li>
+          <li><b>あとから直す</b>　置いた部材を<b>タップ（短く触る）すると選べます</b>。選んだ部材は、材料を変えたり消したりできます。何もない所をタップすると、選ぶのをやめます。</li>
           <li><b>地震スタート！</b>　押したら、いちばん先にこわれそうな部材をタップして<b>予想</b>してから試験します。</li>
           <li><b>結果を見て直す</b>　「スロー再生で見る」で、最初にこわれた所（黄色の輪）を確かめて、作り直そう。星3つを目指そう。</li>
         </ol>
