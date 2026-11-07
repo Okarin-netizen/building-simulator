@@ -344,6 +344,9 @@ label.check {
   flex: 1;
   position: relative;
   min-width: 0;
+  /* たて並び（スマホ）のとき、キャンバスの大きさに引っぱられて画面からはみ出さないように */
+  min-height: 0;
+  overflow: hidden;
 }
 
 canvas {
@@ -949,17 +952,177 @@ canvas {
   padding: 10px 12px;
 }
 
-/* ---------- せまい画面 ---------- */
+/* 指で部材を置いている間は、説明の札を消して、方眼を見やすくする（ルーペが出る） */
+.stage.aiming .hint {
+  display: none;
+}
 
+/* ---------- せまい画面（スマホ） ---------- */
+
+/* たて持ち・よこ持ちのどちらも：見出しを小さく1〜2行にまとめ、建てる場所を広くする */
+@media (max-width: 720px), (max-height: 520px) {
+  .top-row {
+    gap: 6px 10px;
+    padding: 6px 10px;
+    min-height: 0;
+  }
+  .top h1 {
+    font-size: 17px;
+  }
+  .stage-no {
+    font-size: 12px;
+    padding: 2px 8px;
+  }
+  .stage-name {
+    font-size: 14px;
+  }
+  .top-actions {
+    gap: 5px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  .top-actions button.ghost {
+    flex-shrink: 0;
+    min-height: 36px;
+    padding: 2px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+    border-radius: 8px;
+  }
+  .hazard {
+    height: 6px;
+  }
+  .panel {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  .order-card {
+    padding: 8px 10px;
+  }
+  .order-card p {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .panel-go {
+    bottom: -10px;
+    margin: auto -12px -10px;
+    padding: 8px 12px 10px;
+  }
+  .panel-go .stats {
+    margin-bottom: 6px;
+  }
+  .panel-go .stat-value strong {
+    font-size: 18px;
+  }
+  button.go,
+  .panel-go button.back {
+    min-height: 48px;
+    font-size: 17px;
+  }
+  .hint {
+    left: 8px;
+    top: 8px;
+    max-width: calc(100% - 16px);
+    padding: 5px 10px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+}
+
+/* たて持ち：建てる場所を上、道具を下にする */
 @media (max-width: 720px) {
   .layout {
     flex-direction: column-reverse;
   }
   .panel {
     width: auto;
-    max-height: 45vh;
+    max-height: 40vh;
+    max-height: 40dvh;
     border-right: none;
     border-top: 3px solid var(--ink);
+  }
+  .top-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+  /* 予想・スロー再生のときは道具のパネルをしまって、建物を大きく見せる（部材をタップしやすく） */
+  body.predicting .panel,
+  body.replaying .panel {
+    display: none;
+  }
+  .legend-box {
+    right: 8px;
+    bottom: 8px;
+    width: 190px;
+    padding: 4px 8px;
+  }
+  .legend-box p {
+    display: none;
+  }
+  .predict-box,
+  .result,
+  .result.left {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    width: auto !important;
+  }
+  .predict-box {
+    padding: 8px 10px;
+    border-radius: 12px;
+    box-shadow: 0 4px 0 var(--ink);
+  }
+  .predict-box h3 {
+    font-size: 15px;
+    margin-bottom: 2px;
+  }
+  .predict-box p {
+    font-size: 13px;
+    margin-bottom: 6px;
+    line-height: 1.5;
+  }
+  .predict-box .buttons {
+    gap: 6px;
+  }
+  .predict-box button {
+    min-height: 38px;
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+  .predict-box button.go {
+    min-height: 42px;
+    font-size: 15px;
+    box-shadow: 0 3px 0 var(--ink);
+  }
+  .result {
+    max-height: calc(100% - 16px);
+    padding: 12px 14px;
+  }
+  .result h3 {
+    font-size: 22px;
+  }
+  .result .stars {
+    font-size: 24px;
+  }
+  .replay-bar {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+    padding: 6px 8px;
+    gap: 6px;
+  }
+  .replay-bar button {
+    min-height: 38px;
+    padding: 4px 10px;
+    font-size: 13px;
+  }
+}
+
+/* よこ持ちのスマホ：道具のパネルを細くする */
+@media (max-height: 520px) and (min-width: 721px) {
+  .panel {
+    width: 250px;
   }
 }
 
