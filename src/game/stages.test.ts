@@ -20,6 +20,7 @@ function play(stage: Stage, design: Design) {
 const stage = (id: string) => stageById(id)!;
 const W = 'wood' as const;
 const S = 'steel' as const;
+const C = 'concrete' as const;
 
 test('1-1：最初の四角い枠は倒れ、筋交いを足せば予算内でクリアできる', () => {
   const s = stage('1-1');
@@ -50,12 +51,39 @@ test('2-1：木材だけでは倒れ、全部鉄骨は予算オーバー、下�
   expect(play(s, bracedTower([S, S, W, W, W, W])).cleared).toBe(true);
 });
 
-test('2-2：最初のコンクリートの建物は倒れ、材料を変えればクリアできる', () => {
+test('2-2：上が重い建物は倒れ、同じ材料を上下入れかえるだけで、同じ値段のまま星3つでクリアできる', () => {
   const s = stage('2-2');
-  expect(play(s, s.initial()).cleared).toBe(false);
-  expect(play(s, bracedTower([S, W, W, W])).cleared).toBe(true);
+  const start = s.initial();
+  expect(play(s, start).cleared).toBe(false);
+  const swapped = bracedTower([C, C, W, W]);
+  expect(designCost(swapped)).toBe(designCost(start));
+  expect(play(s, swapped).stars).toBe(3);
   // 軽い木材に置きかえるだけでも耐える（重さを減らす工夫）
   expect(play(s, bracedTower([W, W, W, W])).cleared).toBe(true);
+});
+
+test('2-2：上の階の鉄筋コンクリートの重さで下の階がこわれたら、その説明が出る', () => {
+  const s = stage('2-2');
+  const d = s.initial();
+  const world = createWorld(d, makeQuake(s.quake.level, s.quake.type));
+  for (let i = 0; i < 18 * 60; i++) step(world, 1 / 60);
+  expect(world.collapsed).toBe(true);
+  expect(breakAdvice(d, world.firstBreak)).toContain('上の階の鉄筋コンクリート');
+});
+
+test('2-1：下の階を鉄筋コンクリートにすると、鉄骨より安くクリアできる（ただし全部だと重すぎて倒れる）', () => {
+  const s = stage('2-1');
+  const rc = bracedTower([C, C, W, W, W, W]);
+  expect(designCost(rc)).toBeLessThan(designCost(bracedTower([S, S, W, W, W, W])));
+  expect(play(s, rc).stars).toBe(3);
+  expect(play(s, bracedTower([C, C, C, C, C, C])).cleared).toBe(false);
+});
+
+test('5-1：下の階を鉄筋コンクリートにしても、台風に耐えられる', () => {
+  const s = stage('5-1');
+  const d = bracedTower([C, C, W, W, W]);
+  expect(designCost(d)).toBeLessThanOrEqual(s.budget);
+  expect(play(s, d).cleared).toBe(true);
 });
 
 test('2-3：8階建ては材料の使い分けでクリアできる', () => {
@@ -151,7 +179,7 @@ test('6-1：木造6階建ては倒れ、1階に制震ダンパーを1本入れ�
   expect(play(s, solved).cleared).toBe(true);
 });
 
-test('6-2：コンクリートの5階建ては倒れ、免震ゴムを入れると予算内でこわれずに耐える', () => {
+test('6-2：鉄筋コンクリートの6階建ては倒れ、免震ゴムを入れると予算内でこわれずに耐える', () => {
   const s = stage('6-2');
   expect(play(s, s.initial()).cleared).toBe(false);
   const iso = { ...s.initial(), isolated: true };

@@ -12,6 +12,8 @@ export interface Material {
   massPerMeter: number;
   /** 何割伸び縮みしたら折れるか */
   breakStrain: number;
+  /** 押されて縮むときに、何割縮んだら折れるか（ないときは breakStrain と同じ） */
+  compressBreakStrain?: number;
   /** 接合部の曲がりにくさ */
   jointStiffness: number;
   /** 接合部が何ラジアン曲がったら壊れるか */
@@ -25,6 +27,8 @@ export interface Material {
   pinned?: boolean;
   /** 材料ボタンに出す特徴（生徒向け。1〜3 の目安） */
   traits: { strength: number; weight: number; toughness: number } | { note: string };
+  /** 材料ボタンに出す、この材料のよい所（生徒向けの一言） */
+  merit?: string;
 }
 
 export const MATERIALS: Record<MaterialId, Material> = {
@@ -39,6 +43,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
     costPerMeter: 1,
     color: '#c58b4c',
     traits: { strength: 1, weight: 1, toughness: 2 },
+    merit: '軽くて安い',
   },
   steel: {
     id: 'steel',
@@ -51,18 +56,23 @@ export const MATERIALS: Record<MaterialId, Material> = {
     costPerMeter: 4,
     color: '#3d4a5c',
     traits: { strength: 3, weight: 2, toughness: 3 },
+    merit: '強くてねばり強い（値段は高い）',
   },
   concrete: {
     id: 'concrete',
     name: '鉄筋コンクリート',
     axialStiffness: 4.5e5,
     massPerMeter: 2.5,
+    // 引っぱる力は中の鉄筋が受け持ち、押す力はコンクリートが受け持つ。
+    // そのため、押されたとき（縮むとき）のほうが、引っぱられたときよりこわれにくい。
     breakStrain: 0.007,
+    compressBreakStrain: 0.012,
     jointStiffness: 6000,
     jointBreakAngle: 0.04,
     costPerMeter: 2,
     color: '#b9b6ac',
     traits: { strength: 2, weight: 3, toughness: 1 },
+    merit: '押す力に強く、安い・燃えにくい',
   },
   damper: {
     id: 'damper',
