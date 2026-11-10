@@ -811,6 +811,21 @@ canvas {
   display: none;
 }
 
+.sheet-record {
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.sheet-shot {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  background: var(--bg);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+}
+
 .sheet-names {
   display: flex;
   gap: 12px;
@@ -879,44 +894,6 @@ canvas {
 .sheet-actions {
   margin-top: 12px;
   justify-content: flex-end;
-}
-
-@media print {
-  body > *:not(#sheet) {
-    display: none !important;
-  }
-  html,
-  body {
-    height: auto;
-    background: #fff;
-  }
-  .sheet {
-    position: static;
-    background: none;
-    padding: 0;
-  }
-  .sheet-card {
-    width: 100%;
-    max-height: none;
-    border: none;
-    box-shadow: none;
-    padding: 0;
-  }
-  .sheet-title-print {
-    display: inline;
-    font-weight: 700;
-  }
-  .sheet-actions {
-    display: none;
-  }
-  .sheet textarea,
-  .sheet input[type='text'] {
-    border: 1px solid #999;
-  }
-  .sheet td[class^='v-'] {
-    color: var(--ink);
-    background: none;
-  }
 }
 
 /* ---------- クラスランキング ---------- */
@@ -1335,4 +1312,10 @@ canvas {
 
 .glossary dd {
   margin: 0;
+}
+
+/* ボタンに display を指定しているので、hidden のときは確実に消す */
+.top-actions button[hidden],
+.sheet-actions button[hidden] {
+  display: none;
 }

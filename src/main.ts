@@ -10,7 +10,6 @@ import { breakAdvice, judgePrediction, describeMember, type Prediction } from '.
 import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
 import { buildSubmitUrl, classLinkFor, parseFormTemplate, readClassLink, validateTemplate, type FormTemplate } from './game/classForm';
 import {
-  clearAttempts,
   clearClassForm,
   loadAttempts,
   loadClassForm,
@@ -25,6 +24,7 @@ import {
   saveLastStage,
   saveNotes,
 } from './game/progress';
+import { canvasToBlob, cardFileName, drawReflectionCard, loadCardFonts } from './game/reflectionCard';
 import { APP_LICENSE, AUTHOR, CHANGELOG, MIT_TEXT, THIRD_PARTY } from './game/about';
 import { CHAPTER_NAMES, nextStage, stageById, stageFullTitle, stageLabel, STAGES, type Stage } from './game/stages';
 import { drawAimRing, drawDesign, drawLoupe, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
@@ -128,6 +128,8 @@ function openStage(s: Stage | null): void {
   $('test-title').textContent = s?.wind ? '風の試験' : '地震';
   startBtn.textContent = s?.wind ? '強風スタート！' : '地震スタート！';
   $('toggle-iso').hidden = !!s && !s.isolation;
+  $('open-sheet').hidden = s?.chapter !== 'challenge';
+  sheet.hidden = true;
   buildMaterialButtons();
   refreshPanel();
 }
@@ -446,7 +448,7 @@ function showResult(w: World): void {
   const canSend = lastResult !== null && classForm() !== null;
   html += `<div class="buttons">${canSend ? '<button type="button" data-act="send">クラスに送る</button>' : ''}<button type="button" data-act="replay">スロー再生で見る</button>`;
   // チャレンジでは、次の章（発展）へ進まず、同じタワーを改良するのを主なボタンにする
-  if (isChallenge) html += `<button type="button" class="primary" data-act="rebuild">もっと高くする</button>`;
+  if (isChallenge) html += `<button type="button" data-act="sheet">ふりかえりを書く</button><button type="button" class="primary" data-act="rebuild">もっと高くする</button>`;
   else html += `<button type="button" data-act="rebuild">組み立てにもどる</button>`;
   const next = stage && ev.cleared && !isChallenge ? nextStage(stage.id) : undefined;
   if (next) html += `<button type="button" class="primary" data-act="next">次のステージへ</button>`;
@@ -459,6 +461,7 @@ function showResult(w: World): void {
   placeResultBox(w);
   resultBox.querySelector('[data-act=replay]')?.addEventListener('click', startReplay);
   resultBox.querySelector('[data-act=send]')?.addEventListener('click', openSend);
+  resultBox.querySelector('[data-act=sheet]')?.addEventListener('click', openSheet);
   resultBox.querySelector('[data-act=rebuild]')?.addEventListener('click', backToBuild);
   resultBox.querySelector('[data-act=next]')?.addEventListener('click', () => next && openStage(next));
   resultBox.querySelector('[data-act=menu]')?.addEventListener('click', openMenu);
@@ -543,7 +546,7 @@ $('replay-break').addEventListener('click', () => {
 });
 $('replay-close').addEventListener('click', closeReplay);
 
-// ---------- ふりかえりシート ----------
+// ---------- ふりかえりシート（最高タワーチャレンジのときだけ） ----------
 
 const QUESTIONS = [
   { id: 'q1', text: '予想と結果をくらべて、気づいたことは？' },
@@ -552,24 +555,50 @@ const QUESTIONS = [
   { id: 'q4', text: '班のみんなの作品で、よいと思った工夫は？' },
 ];
 
+/** ふりかえりを書けるのは、最後の自由設計（最高タワーチャレンジ）だけ */
+const canReflect = () => stage?.chapter === 'challenge';
+
+/** シートを開いたときのビルの画面（画像に入れるもの） */
+const shotCanvas = document.createElement('canvas');
+const sheetMsg = $<HTMLParagraphElement>('sheet-msg');
+
+function challengeRecord(): string {
+  const best = loadProgress().challenge?.bestHeight;
+  const tries = loadAttempts().filter((a) => a.stageId === 'challenge').length;
+  return `${best ? `最高記録 ${best} m` : 'まだ記録なし'}（試験 ${tries} 回）`;
+}
+
+/** 画像に写す範囲（キャンバスの画素）。高いステージは空が広いので、建物のまわりを切り出す */
+function shotRect(): { x: number; y: number; w: number; h: number } {
+  const dpr = canvas.width / cssWidth;
+  const pts = [...design.nodes, ...(world && phase !== 'build' && phase !== 'predict' ? world.nodes : [])].map((n) => toScreen(viewport, n.x, n.y));
+  if (pts.length === 0) return { x: 0, y: 0, w: canvas.width, h: canvas.height };
+  const margin = 80;
+  // 横長の画面に収まりやすいよう、高さの 1.4 倍以上の幅にする
+  let top = Math.max(0, Math.min(...pts.map((p) => p.sy)) - margin);
+  const bottom = cssHeight;
+  top = Math.min(top, bottom - 240);
+  const h = bottom - Math.max(0, top);
+  const cx = (Math.min(...pts.map((p) => p.sx)) + Math.max(...pts.map((p) => p.sx))) / 2;
+  const half = Math.min(cssWidth / 2, Math.max((Math.max(...pts.map((p) => p.sx)) - Math.min(...pts.map((p) => p.sx))) / 2 + margin, (h * 1.4) / 2));
+  const left = Math.max(0, Math.min(cssWidth - half * 2, cx - half));
+  const px = (v: number) => Math.round(v * dpr);
+  return { x: px(left), y: px(Math.max(0, top)), w: px(Math.min(cssWidth, half * 2)), h: px(h) };
+}
+
 function openSheet(): void {
-  if (phase === 'test') return;
+  if (phase === 'test' || !canReflect()) return;
+  selectMember(null);
+  // 選んだ部材の光などを消してから写すため、1こま描き直すのを待つ
+  requestAnimationFrame(() => {
+    const r = shotRect();
+    shotCanvas.width = r.w;
+    shotCanvas.height = r.h;
+    shotCanvas.getContext('2d')!.drawImage(canvas, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
+    $<HTMLImageElement>('sheet-shot').src = shotCanvas.toDataURL('image/png');
+  });
   const notes = loadNotes();
-  const attempts = loadAttempts();
-  const box = $('sheet-attempts');
-  if (attempts.length === 0) {
-    box.innerHTML = '<p class="sheet-empty">まだ試験の記録がありません。</p>';
-  } else {
-    const rows = attempts
-      .map((a) => {
-        const d = new Date(a.at);
-        const time = `${d.getMonth() + 1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
-        const result = a.cleared ? (a.stars > 0 ? `${'★'.repeat(a.stars)}` : '耐えた') : '×';
-        return `<tr><td>${time}</td><td>${escapeHtml(a.stageTitle)}</td><td>${a.height}m / ${a.cost}万円</td><td>${escapeHtml(a.predicted)}</td><td>${escapeHtml(a.actual)}</td><td class="v-${a.verdict}">${VERDICT_LABEL[a.verdict]}</td><td>${result}</td></tr>`;
-      })
-      .join('');
-    box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>日時</th><th>ステージ</th><th>高さ・費用</th><th>予想</th><th>最初にこわれた所</th><th>答え合わせ</th><th>結果</th></tr></thead><tbody>${rows}</tbody></table></div>`;
-  }
+  $('sheet-record').textContent = `${stage!.title}　${challengeRecord()}`;
   const qs = $('sheet-questions');
   qs.innerHTML = QUESTIONS.map(
     (q, i) => `<label class="question">${i + 1}. ${q.text}<textarea rows="3" data-note="${q.id}"></textarea></label>`,
@@ -577,35 +606,105 @@ function openSheet(): void {
   sheet.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-note]').forEach((el) => {
     el.value = notes[el.dataset.note!] ?? '';
   });
+  sheetMsg.hidden = true;
+  $('sheet-share').hidden = !canShareFiles();
   sheet.hidden = false;
   fitAllTextareas();
 }
 
-/** 書いた分だけ欄を広げる（印刷したときに、はみ出た行が切れないように） */
+/** 書いた分だけ欄を広げる */
 function fitTextarea(el: HTMLTextAreaElement): void {
   el.style.height = 'auto';
   el.style.height = `${el.scrollHeight + 2}px`;
 }
 const fitAllTextareas = () => sheet.querySelectorAll('textarea').forEach(fitTextarea);
-window.addEventListener('beforeprint', fitAllTextareas);
 
 sheet.addEventListener('input', (e) => {
   const el = e.target as HTMLInputElement | HTMLTextAreaElement;
   if (!el.dataset.note) return;
+  sheetMsg.hidden = true;
   if (el instanceof HTMLTextAreaElement) fitTextarea(el);
   const notes = loadNotes();
   notes[el.dataset.note] = el.value;
   saveNotes(notes);
 });
+
+function canShareFiles(): boolean {
+  try {
+    const probe = new File([''], 'a.png', { type: 'image/png' });
+    return typeof navigator.share === 'function' && !!navigator.canShare?.({ files: [probe] });
+  } catch {
+    return false;
+  }
+}
+
+function showSheetMsg(text: string, ok = false): void {
+  sheetMsg.textContent = text;
+  sheetMsg.className = `class-msg ${ok ? 'ok' : 'ng'}`;
+  sheetMsg.hidden = false;
+}
+
+/** 名前・答え・ビルの画面を1枚の PNG にする。名前がなければ作らない */
+async function makeReflectionFile(): Promise<File | null> {
+  const notes = loadNotes();
+  const name = (notes.name ?? '').trim();
+  if (!name) {
+    showSheetMsg('名前を書いてから保存しよう。');
+    $<HTMLInputElement>('note-name').focus();
+    return null;
+  }
+  const questions = QUESTIONS.map((q) => ({ text: q.text, answer: notes[q.id] ?? '' }));
+  const empty = questions.filter((q) => !q.answer.trim()).length;
+  if (empty > 0 && !confirm(`まだ書いていない問いが ${empty} つあります。このまま保存しますか？`)) return null;
+  const now = new Date();
+  await loadCardFonts(name + (notes.group ?? '') + questions.map((q) => q.text + q.answer).join(''));
+  const card = drawReflectionCard({
+    name,
+    group: (notes.group ?? '').trim(),
+    stageTitle: stage!.title,
+    record: challengeRecord(),
+    date: `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`,
+    questions,
+    shot: shotCanvas,
+  });
+  const blob = await canvasToBlob(card);
+  return new File([blob], cardFileName(now), { type: 'image/png' });
+}
+
+$('sheet-save').addEventListener('click', async () => {
+  const file = await makeReflectionFile();
+  if (!file) return;
+  const url = URL.createObjectURL(file);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = file.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  showSheetMsg(`「${file.name}」を保存しました（「ダウンロード」フォルダ）。この画像を提出しよう。`, true);
+});
+$('sheet-share').addEventListener('click', async () => {
+  const file = await makeReflectionFile();
+  if (!file) return;
+  try {
+    await navigator.share({ files: [file], title: '最高タワー工房 ふりかえり' });
+  } catch (e) {
+    // 共有の画面を閉じただけのときは何もしない
+    if ((e as Error)?.name !== 'AbortError') showSheetMsg('共有できませんでした。「画像で保存する」で保存して提出しよう。');
+  }
+});
 $('open-sheet').addEventListener('click', openSheet);
 $('sheet-close').addEventListener('click', () => (sheet.hidden = true));
-$('sheet-print').addEventListener('click', () => window.print());
 $('sheet-clear').addEventListener('click', () => {
-  if (!confirm('試験の記録と書いたことを全部消しますか？')) return;
-  clearAttempts();
-  // クラスに送るときのニックネームは、ふりかえりの記録ではないので残す
-  const { nickname } = loadNotes();
-  saveNotes(nickname ? { nickname } : {});
+  if (!confirm('ふりかえりに書いたことを全部消しますか？（名前は残ります）')) return;
+  // 名前・組班と、クラスに送るときのニックネームは残す
+  const { nickname, name, group } = loadNotes();
+  const keep: Record<string, string> = {};
+  if (nickname) keep.nickname = nickname;
+  if (name) keep.name = name;
+  if (group) keep.group = group;
+  saveNotes(keep);
   openSheet();
 });
 closeOnBackdrop(sheet);
