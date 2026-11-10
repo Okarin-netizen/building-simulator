@@ -8,6 +8,7 @@ import { distanceToSegment } from './physics/geometry';
 import { canStartTest, evaluate } from './game/evaluate';
 import { breakAdvice, judgePrediction, describeMember, type Prediction } from './game/predict';
 import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
+import RANKING_FORM_SCRIPT from './teacher/rankingForm.gs?raw';
 import { buildSubmitUrl, classLinkFor, parseFormTemplate, readClassLink, validateTemplate, type FormTemplate } from './game/classForm';
 import {
   clearClassForm,
@@ -770,6 +771,23 @@ classCopy.addEventListener('click', async () => {
     classCopy.textContent = '選んだ所をコピーしてください';
   }
   setTimeout(() => (classCopy.textContent = 'リンクをコピー'), 2000);
+});
+const scriptCopy = $<HTMLButtonElement>('class-script-copy');
+scriptCopy.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(RANKING_FORM_SCRIPT);
+    scriptCopy.textContent = 'コピーしました';
+  } catch {
+    // 古い方法でコピーする
+    const tmp = document.createElement('textarea');
+    tmp.value = RANKING_FORM_SCRIPT;
+    document.body.append(tmp);
+    tmp.select();
+    const ok = document.execCommand('copy');
+    tmp.remove();
+    scriptCopy.textContent = ok ? 'コピーしました' : 'コピーできませんでした';
+  }
+  setTimeout(() => (scriptCopy.textContent = 'フォームを作るスクリプトをコピー'), 3000);
 });
 $('class-test').addEventListener('click', () => {
   const t = classForm();
