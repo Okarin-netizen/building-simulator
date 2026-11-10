@@ -5,7 +5,7 @@ import { MATERIALS, MATERIAL_IDS, type MaterialId } from './physics/materials';
 import { groundOffset, makeQuake, QUAKE_LEVELS, QUAKE_TYPES, TEST_DURATION, type QuakeLevel, type QuakeType } from './physics/quake';
 import { createWorld, SETTLE_TIME, step, type World } from './physics/world';
 import { distanceToSegment } from './physics/geometry';
-import { canStartTest, evaluate } from './game/evaluate';
+import { canStartTest, evaluate, safetyNote } from './game/evaluate';
 import { breakAdvice, judgePrediction, describeMember, type Prediction } from './game/predict';
 import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
 import { loadDesign, loadLastStage, loadProgress, logAttempt, recordResult, saveDesign, saveLastStage } from './game/progress';
@@ -418,7 +418,10 @@ function showResult(w: World): void {
   let html = `<div class="result-head"><h3>${title}</h3>${stage ? `<span class="stars">${starText(ev.stars)}</span>` : ''}</div>`;
   html += `<ul>${ev.checks.map((c) => `<li class="${c.ok ? 'ok' : ''}">${escapeHtml(c.label)}</li>`).join('')}</ul>`;
   html += `<div class="answer ${judge.verdict}"><span class="verdict">${VERDICT_LABEL[judge.verdict]}</span><div><strong>予想の答え合わせ</strong><br>${escapeHtml(judge.message)}<br><small>予想：${escapeHtml(judge.predicted)}　／　結果：${escapeHtml(judge.actual)}</small></div></div>`;
-  if (stage && ev.cleared) html += `<div class="lesson"><strong>なぜ？</strong>${escapeHtml(stage.lesson)}</div>`;
+  const note = isChallenge ? safetyNote(ev) : null;
+  if (note) html += `<p class="safety-note">${escapeHtml(note)}</p>`;
+  if (stage && ev.cleared)
+    html += `<div class="lesson"><strong>なぜ？</strong><p class="lesson-point">${escapeHtml(stage.point)}</p>${escapeHtml(stage.lesson)}</div>`;
   else if (ev.fell !== 'none') {
     const advice = breakAdvice(design, w.firstBreak);
     const partly = ev.fell === 'partly' ? '建物の一部が折れて、元の高さから落ちました。くずれた所がある建物は「倒れなかった」になりません。' : '';

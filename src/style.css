@@ -549,9 +549,37 @@ canvas {
   margin-right: 6px;
 }
 
+/* 「なぜ？」のひとことまとめ：左に黄色の太線を引いて、控えめに目立たせる */
+.result .lesson-point {
+  margin: 4px 0 6px;
+  padding-left: 8px;
+  border-left: 4px solid var(--yellow);
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+/* チャレンジで、倒れなかったけれど星3つに届かなかったときの注意 */
+.result .safety-note {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border: 2px solid var(--ink);
+  border-left-width: 8px;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 700;
+}
+
 .result .buttons {
   justify-content: flex-end;
   margin-top: 12px;
+  /* 解説が長くてカードの中がスクロールしても、ボタンはいつも下に見えるようにする */
+  position: sticky;
+  bottom: -18px;
+  margin-bottom: -18px;
+  padding: 10px 0 18px;
+  background: #fff;
+  border-top: 2px solid var(--line);
 }
 
 /* 予想の答え合わせ */
@@ -1392,6 +1420,13 @@ canvas {
 
 .glossary dd {
   margin: 0;
+}
+
+/* 遊び方の下の小さな注記 */
+.howto-note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--quiet);
 }
 
 /* ボタンに display を指定しているので、hidden のときは確実に消す */
