@@ -20,6 +20,9 @@
  *   前の版のスクリプトでフォームを作った場合も、このスクリプトに貼りかえてデプロイすれば、そのフォームの記録を表示できる
  *   公開されるのは、チャレンジの記録の「順位・組班・ニックネーム・高さ」の上位50件だけ。
  *   授業が終わったら「デプロイを管理」からアーカイブすると、ランキングは見られなくなる。
+ *   このスクリプトを新しい版に貼りかえたときは、「デプロイを管理」→ 鉛筆のマーク →「バージョン」を「新バージョン」にして
+ *   「デプロイ」を押す（URL は変わらないので、クラスリンクは配り直さなくてよい）。
+ *   ランキングは30秒ごとに読み直す。クラス全員がいっせいに開いても動くようにするため。
  *   学校のアカウントで「全員」が選べないとき（「組織内のすべてのユーザー」だけのとき）は、アプリの中では見られない。
  *   そのときは、スプレッドシートの「ランキング」シートを大きな画面に映して使う。
  *
@@ -36,6 +39,10 @@ var APP_URL = 'https://okarin-netizen.github.io/building-simulator/';
 
 /** アプリに見せるランキングの件数 */
 var RANKING_LIMIT = 50;
+
+/** ランキングを覚えておく秒数（この間に送られた記録は、次に読み直したときに出る） */
+var RANKING_CACHE_SECONDS = 30;
+var RANKING_CACHE_KEY = 'ranking-v1';
 
 /** フォームの質問（順番どおりにスプレッドシートの列になる）。placeholder はアプリの classForm.ts と同じ言葉 */
 var RANKING_QUESTIONS = [
@@ -139,18 +146,55 @@ function makeClassLink() {
 
 /** ウェブアプリ：アプリにランキングを返す */
 function doGet() {
-  var data;
+  return ContentService.createTextOutput(rankingJson_()).setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * ランキングの JSON。クラス全員がいっせいに開いても、スプレッドシートを読むのは
+ * RANKING_CACHE_SECONDS 秒に1回だけにする（ほかは覚えておいた答えをすぐ返すので、
+ * Apps Script の「同時に動かせる数」の上限に当たりにくい）。
+ */
+function rankingJson_() {
+  var cache = CacheService.getScriptCache();
+  var hit = cache.get(RANKING_CACHE_KEY);
+  if (hit) return hit;
+  // 読み直すのは1人だけ。ほかの人は少し待って、その答えを使う
+  var lock = LockService.getScriptLock();
+  var locked = lock.tryLock(10000);
+  try {
+    if (locked) {
+      hit = cache.get(RANKING_CACHE_KEY);
+      if (hit) return hit;
+    }
+    var json = readRankingJson_();
+    // 読めなかったとき（error）は覚えず、次の人がもう一度読む
+    if (json) {
+      try {
+        cache.put(RANKING_CACHE_KEY, json, RANKING_CACHE_SECONDS);
+      } catch (err) {
+        // 大きすぎて覚えられなくても、答えは返す
+      }
+      return json;
+    }
+    return JSON.stringify({ error: 'ランキングを読めませんでした' });
+  } finally {
+    if (locked) lock.releaseLock();
+  }
+}
+
+/** スプレッドシートを読んでランキングの JSON を作る。読めないときは null */
+function readRankingJson_() {
   try {
     var ss = rankingSpreadsheet_();
     var responses = ss.getSheets().filter(function (s) {
       return !!s.getFormUrl();
     })[0];
-    data = computeRanking_(responses.getDataRange().getValues(), RANKING_LIMIT);
+    var data = computeRanking_(responses.getDataRange().getValues(), RANKING_LIMIT);
     data.updated = new Date().toISOString();
+    return JSON.stringify(data);
   } catch (err) {
-    data = { error: 'ランキングを読めませんでした' };
+    return null;
   }
-  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
