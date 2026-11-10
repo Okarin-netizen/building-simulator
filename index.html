@@ -238,7 +238,7 @@
           <li><a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">Google Apps Script</a> で新しいプロジェクトを開き、中の文字を消して貼りつける</li>
           <li>「実行」を押し、自分のアカウントで許可する（「確認されていません」と出たら「詳細」→「移動」）</li>
           <li>実行ログに出る<b>クラスリンク</b>を生徒に配る。フォームと回答のスプレッドシートが先生のドライブにでき、「ランキング」シートにチャレンジの記録が高い順に自動で並びます</li>
-          <li>アプリの中でもランキングを見せるときは、Apps Script の「デプロイ」→「新しいデプロイ」→「ウェブアプリ」で、アクセスできるユーザーを「全員」にしてデプロイする。次に関数を <code>makeClassLink</code> にして「実行」し、ログに出る新しいクラスリンクを配る（見えるのは順位・組班・ニックネーム・高さだけ）</li>
+          <li>アプリの中でもランキングを見せるときは、Apps Script の「デプロイ」→「新しいデプロイ」→ 歯車で「ウェブアプリ」を選び、次のユーザーとして実行「自分」、アクセスできるユーザー「全員」でデプロイする。出てきた<b>ウェブアプリの URL</b>を、下の「アプリの中でランキングを見せる」の欄に貼り、できたクラスリンクを配る（関数 <code>makeClassLink</code> を実行してログのリンクを使ってもよい）。見えるのは順位・組班・ニックネーム・高さだけ</li>
         </ol>
         <details class="class-manual">
           <summary>自分でフォームを作るときは</summary>
@@ -261,6 +261,10 @@
             <button type="button" id="class-copy" class="primary">リンクをコピー</button>
             <button type="button" id="class-test">記入済みフォームを試しに開く</button>
           </div>
+          <h3>アプリの中でランキングを見せる</h3>
+          <p class="note">Apps Script を「ウェブアプリ」としてデプロイしたときに出る URL（https://script.google.com/…/exec）を貼ると、上のクラスリンクにランキングの読み先が入ります。貼ったあとのクラスリンクを配り直してください。</p>
+          <input type="url" id="class-ranking" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" />
+          <p class="class-msg" id="class-ranking-msg"></p>
         </div>
         <div class="buttons sheet-actions">
           <button type="button" id="class-forget">この端末の設定を消す</button>

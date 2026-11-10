@@ -54,3 +54,16 @@ describe('アプリ内のクラスランキング', () => {
     expect(isMine(row, '', '')).toBe(false);
   });
 });
+
+describe('先生が貼るウェブアプリの URL', () => {
+  test('/dev や ? のあとを直して受けつけ、ほかの URL は受けつけない', async () => {
+    const { parseRankingUrl } = await import('./classForm');
+    expect(parseRankingUrl(' https://script.google.com/macros/s/AKfy/exec ')).toBe('https://script.google.com/macros/s/AKfy/exec');
+    expect(parseRankingUrl('https://script.google.com/macros/s/AKfy/dev')).toBe('https://script.google.com/macros/s/AKfy/exec');
+    expect(parseRankingUrl('https://script.google.com/macros/s/AKfy/exec?usp=sharing')).toBe('https://script.google.com/macros/s/AKfy/exec');
+    expect(parseRankingUrl('https://script.google.com/a/example.ed.jp/macros/s/AKfy/exec')).toBe('https://script.google.com/a/example.ed.jp/macros/s/AKfy/exec');
+    expect(parseRankingUrl('https://script.google.com/a/macros/example.ed.jp/s/AKfy/exec')).toBe('https://script.google.com/a/macros/example.ed.jp/s/AKfy/exec');
+    expect(parseRankingUrl('https://docs.google.com/forms/d/e/X/viewform')).toBeNull();
+    expect(parseRankingUrl('https://script.google.com/home/projects/abc/edit')).toBeNull();
+  });
+});

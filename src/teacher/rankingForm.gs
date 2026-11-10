@@ -15,6 +15,9 @@
  *      「次のユーザーとして実行」は「自分」、「アクセスできるユーザー」は「全員」にして「デプロイ」
  *   6. 関数を makeClassLink に切りかえて「実行」する。ログに、ランキングも見られるクラスリンクが出るので、
  *      4. のリンクの代わりにこれを配る
+ *      （または、デプロイで出た「ウェブアプリの URL」を、アプリの「先生用：クラスランキングの設定」の
+ *       「アプリの中でランキングを見せる」の欄に貼っても、同じクラスリンクができる）
+ *   前の版のスクリプトでフォームを作った場合も、このスクリプトに貼りかえてデプロイすれば、そのフォームの記録を表示できる
  *   公開されるのは、チャレンジの記録の「順位・組班・ニックネーム・高さ」の上位50件だけ。
  *   授業が終わったら「デプロイを管理」からアーカイブすると、ランキングは見られなくなる。
  *
@@ -136,7 +139,7 @@ function makeClassLink() {
 function doGet() {
   var data;
   try {
-    var ss = SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('SHEET_ID'));
+    var ss = rankingSpreadsheet_();
     var responses = ss.getSheets().filter(function (s) {
       return !!s.getFormUrl();
     })[0];
@@ -146,6 +149,27 @@ function doGet() {
     data = { error: 'ランキングを読めませんでした' };
   }
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * 回答のスプレッドシート。前の版のスクリプトで作ったときは ID が保存されていないので、
+ * 名前で探して（いちばん新しいもの）覚えておく。
+ */
+function rankingSpreadsheet_() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('SHEET_ID');
+  if (!id) {
+    var files = DriveApp.getFilesByName('最高タワー工房 クラスランキング（回答）');
+    var newest = null;
+    while (files.hasNext()) {
+      var f = files.next();
+      if (!newest || f.getLastUpdated() > newest.getLastUpdated()) newest = f;
+    }
+    if (!newest) throw new Error('回答のスプレッドシートが見つかりません。先に createRankingForm を実行してください。');
+    id = newest.getId();
+    props.setProperty('SHEET_ID', id);
+  }
+  return SpreadsheetApp.openById(id);
 }
 
 /**

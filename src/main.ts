@@ -10,7 +10,7 @@ import { breakAdvice, judgePrediction, describeMember, type Prediction } from '.
 import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
 import RANKING_FORM_SCRIPT from './teacher/rankingForm.gs?raw';
 import { fetchRanking, isMine } from './game/classRanking';
-import { buildSubmitUrl, classLinkFor, parseFormTemplate, readClassLink, validateTemplate, type FormTemplate } from './game/classForm';
+import { buildSubmitUrl, classLinkFor, parseFormTemplate, parseRankingUrl, readClassLink, validateTemplate, type FormTemplate } from './game/classForm';
 import {
   clearClassForm,
   loadAttempts,
@@ -805,8 +805,47 @@ $('menu-ranking').addEventListener('click', openRanking);
 
 function showClassLink(t: FormTemplate | null): void {
   $('class-link-box').hidden = !t;
-  if (t) $<HTMLTextAreaElement>('class-link').value = classLinkFor(location.href, t);
+  if (!t) return;
+  $<HTMLTextAreaElement>('class-link').value = classLinkFor(location.href, t);
+  const msg = $('class-ranking-msg');
+  if (t.ranking) {
+    rankingInput.value = t.ranking;
+    msg.textContent = 'ランキングの読み先が入っています。このクラスリンクを配ると、生徒もアプリの中でランキングを見られます。';
+    msg.className = 'class-msg ok';
+  } else {
+    rankingInput.value = '';
+    msg.textContent = '';
+    msg.className = 'class-msg';
+  }
 }
+
+const rankingInput = $<HTMLInputElement>('class-ranking');
+rankingInput.addEventListener('input', () => {
+  const t = classForm();
+  const msg = $('class-ranking-msg');
+  if (!t) return;
+  const v = rankingInput.value.trim();
+  if (!v) {
+    if (t.ranking) {
+      const { ranking: _drop, ...rest } = t;
+      void _drop;
+      saveClassForm(rest);
+      showClassLink(rest);
+      refreshClassStatus();
+    }
+    return;
+  }
+  const url = parseRankingUrl(v);
+  if (!url) {
+    msg.textContent = 'ウェブアプリの URL ではありません。Apps Script の「デプロイ」→「デプロイを管理」で出る、https://script.google.com/ で始まり /exec で終わる URL を貼ってください。';
+    msg.className = 'class-msg ng';
+    return;
+  }
+  const next = { ...t, ranking: url };
+  saveClassForm(next);
+  showClassLink(next);
+  refreshClassStatus();
+});
 
 function openClassDialog(): void {
   classInput.value = '';

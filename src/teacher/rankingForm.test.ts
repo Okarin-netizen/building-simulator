@@ -14,7 +14,7 @@ function load(globals: Record<string, unknown> = {}) {
   const names = Object.keys(globals);
   const factory = new Function(
     ...names,
-    `${SOURCE}\nreturn { createRankingForm, makeClassLink, buildClassLink_, computeRanking_, RANKING_QUESTIONS, APP_URL };`,
+    `${SOURCE}\nreturn { createRankingForm, makeClassLink, doGet, buildClassLink_, computeRanking_, RANKING_QUESTIONS, APP_URL };`,
   );
   return factory(...names.map((n) => globals[n])) as {
     createRankingForm: () => string;
@@ -209,5 +209,29 @@ describe('先生用スクリプト：アプリ内ランキング', () => {
       ranking,
     );
     expect(readClassLink(link.slice(link.indexOf('#')))?.ranking).toBe(ranking);
+  });
+});
+
+describe('先生用スクリプト：前の版で作ったフォームでもランキングを返す', () => {
+  test('シートの ID がないときは、名前で回答のスプレッドシートを探して覚える', () => {
+    const props: Record<string, string> = {};
+    const sheet = { getFormUrl: () => 'x', getDataRange: () => ({ getValues: () => [['ニックネーム', 'ステージ', '高さ（m）'], ['たろう', 'チャレンジ 最高タワーチャレンジ', 9]] }) };
+    const files = [
+      { getId: () => 'OLD', getLastUpdated: () => new Date('2026-11-01') },
+      { getId: () => 'NEW', getLastUpdated: () => new Date('2026-11-10') },
+    ];
+    let opened = '';
+    let body = '';
+    const out: any = { setMimeType: () => out };
+    const { doGet } = load({
+      PropertiesService: { getScriptProperties: () => ({ getProperty: (k: string) => props[k] ?? null, setProperty: (k: string, v: string) => (props[k] = v) }) },
+      DriveApp: { getFilesByName: () => { let i = 0; return { hasNext: () => i < files.length, next: () => files[i++] }; } },
+      SpreadsheetApp: { openById: (id: string) => ((opened = id), { getSheets: () => [sheet] }) },
+      ContentService: { createTextOutput: (t: string) => ((body = t), out), MimeType: { JSON: 'json' } },
+    }) as any;
+    doGet();
+    expect(opened).toBe('NEW');
+    expect(props.SHEET_ID).toBe('NEW');
+    expect(JSON.parse(body).rows).toEqual([{ rank: 1, group: '', name: 'たろう', height: 9 }]);
   });
 });
