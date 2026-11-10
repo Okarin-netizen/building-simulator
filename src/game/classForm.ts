@@ -38,9 +38,16 @@ const ENTRY_KEY = /^entry\.\d+$/;
 
 /** Google フォームの回答ページの URL か */
 const isFormUrl = (u: URL) => u.protocol === 'https:' && u.hostname === FORM_HOST && FORM_PATH.test(u.pathname);
-const RANKING_URL = /^https:\/\/script\.google\.com\/(?:a\/macros\/[\w.-]+|macros)\/s\/[\w-]+\/exec$/;
+// 学校のアカウントでは /a/macros/学校/s/… や /a/学校/macros/s/… の形になることがある
+const RANKING_URL = /^https:\/\/script\.google\.com\/(?:macros|a\/macros\/[\w.-]+|a\/[\w.-]+\/macros)\/s\/[\w-]+\/exec$/;
 /** 先生のランキング用ウェブアプリの URL か（ほかの所には問い合わせない） */
 export const isRankingUrl = (s: unknown): s is string => typeof s === 'string' && RANKING_URL.test(s);
+
+/** 先生が貼ったウェブアプリの URL を読む（? や # のあとは捨て、テスト用の /dev は /exec にする） */
+export function parseRankingUrl(input: string): string | null {
+  const u = input.trim().split(/[?#]/)[0].replace(/\/dev$/, '/exec');
+  return isRankingUrl(u) ? u : null;
+}
 
 /** 送り先の URL（? や # のあとを取りのぞいたもの） */
 const formUrl = (u: URL) => `https://${FORM_HOST}${u.pathname}`;

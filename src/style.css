@@ -939,6 +939,7 @@ canvas {
 }
 
 #class-dialog textarea,
+#class-dialog input,
 #send-dialog input {
   display: block;
   width: 100%;
