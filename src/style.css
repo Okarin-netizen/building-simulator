@@ -954,6 +954,22 @@ canvas {
   font-size: 16px;
 }
 
+#class-dialog h3 {
+  font-size: 15px;
+  margin: 4px 0 4px;
+}
+
+.class-manual {
+  margin: 0 0 10px;
+}
+
+.class-manual summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
 .class-msg {
   font-size: 14px;
   font-weight: 700;

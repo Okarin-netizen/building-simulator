@@ -230,15 +230,25 @@
       <div class="menu-card">
         <h2>クラスランキングの設定（先生用）</h2>
         <p class="note">生徒の記録を、先生の Google フォームに集めます。サーバーは使わず、記録はフォームの回答（スプレッドシート）にだけ残ります。</p>
+        <h3>かんたん：スクリプトで一度に作る</h3>
         <ol class="steps">
-          <li>Google フォームを作り、記述式（短文・入力チェックなし）の質問を作る：<b>ニックネーム</b>・<b>ステージ</b>・<b>高さ</b>（必須）、<b>組・班</b>・<b>星</b>・<b>費用</b>・<b>結果</b>（なくてもよい）</li>
-          <li>フォームの「︙」→「事前入力したURLを取得」で、各質問に次の英字を入れる：<br><code>NAME</code>・<code>STAGE</code>・<code>HEIGHT</code>・<code>GROUP</code>・<code>STARS</code>・<code>COST</code>・<code>RESULT</code></li>
-          <li>「リンクを取得」→「リンクをコピー」して、下に貼る</li>
-          <li>授業では、回答のスプレッドシートを「高さ」の列で降順（Z→A）に並べ替えると、ランキングになります</li>
+          <li><button type="button" id="class-script-copy" class="primary">フォームを作るスクリプトをコピー</button></li>
+          <li><a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">Google Apps Script</a> で新しいプロジェクトを開き、中の文字を消して貼りつける</li>
+          <li>「実行」を押し、自分のアカウントで許可する（「確認されていません」と出たら「詳細」→「移動」）</li>
+          <li>実行ログに出る<b>クラスリンク</b>を生徒に配る。フォームと回答のスプレッドシートが先生のドライブにでき、「ランキング」シートにチャレンジの記録が高い順に自動で並びます</li>
         </ol>
-        <label>事前入力リンク
-          <textarea id="class-input" rows="3" placeholder="https://docs.google.com/forms/d/e/…/viewform?usp=pp_url&amp;entry.…=NAME…"></textarea>
-        </label>
+        <details class="class-manual">
+          <summary>自分でフォームを作るときは</summary>
+          <ol class="steps">
+            <li>Google フォームを作り、記述式（短文・入力チェックなし）の質問を作る：<b>ニックネーム</b>・<b>ステージ</b>・<b>高さ</b>（必須）、<b>組・班</b>・<b>星</b>・<b>費用</b>・<b>結果</b>（なくてもよい）</li>
+            <li>フォームの「︙」→「事前入力したURLを取得」で、各質問に次の英字を入れる：<br><code>NAME</code>・<code>STAGE</code>・<code>HEIGHT</code>・<code>GROUP</code>・<code>STARS</code>・<code>COST</code>・<code>RESULT</code></li>
+            <li>「リンクを取得」→「リンクをコピー」して、下に貼る</li>
+            <li>授業では、回答のスプレッドシートを「高さ」の列で降順（Z→A）に並べ替えると、ランキングになります</li>
+          </ol>
+          <label>事前入力リンク
+            <textarea id="class-input" rows="3" placeholder="https://docs.google.com/forms/d/e/…/viewform?usp=pp_url&amp;entry.…=NAME…"></textarea>
+          </label>
+        </details>
         <p class="class-msg" id="class-msg"></p>
         <div class="class-link" id="class-link-box" hidden>
           <h3>生徒に配るクラスリンク</h3>
