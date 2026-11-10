@@ -215,3 +215,25 @@ test('材料が切りかわったすぐ上の階がこわれたら、その説�
   expect(world.collapsed).toBe(true);
   expect(breakAdvice(d, world.firstBreak)).toContain('材料が切りかわった');
 });
+
+test('どのステージにも「なぜ？」のひとことまとめがあり、40字以内', () => {
+  for (const s of STAGES) {
+    expect({ id: s.id, ok: s.point.length > 0 && s.point.length <= 40 }).toEqual({ id: s.id, ok: true });
+  }
+});
+
+test('最高タワーチャレンジ：鉄骨1階・鉄筋コンクリート3階・木材5階の9階建ては、予算内で27mの記録になる', () => {
+  const s = stage('challenge');
+  const d = bracedTower([S, C, C, C, W, W, W, W, W]);
+  expect(designCost(d)).toBe(225);
+  const ev = play(s, d);
+  expect(ev.cleared).toBe(true);
+  expect(ev.height).toBe(27);
+});
+
+test('最高タワーチャレンジ：幅を8mに広げただけの木材の8階建ては倒れる（幅を広げるだけでは記録は伸びない）', () => {
+  const s = stage('challenge');
+  const d = wideTower(8, 2);
+  expect(designCost(d)).toBeLessThanOrEqual(s.budget);
+  expect(play(s, d).cleared).toBe(false);
+});

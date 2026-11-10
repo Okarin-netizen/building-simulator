@@ -43,7 +43,7 @@ export const MATERIALS: Record<MaterialId, Material> = {
     costPerMeter: 1,
     color: '#c58b4c',
     traits: { strength: 1, weight: 1, toughness: 2 },
-    merit: '軽くて安い',
+    merit: '軽いわりに強く、安い',
   },
   steel: {
     id: 'steel',

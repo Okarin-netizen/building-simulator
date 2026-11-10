@@ -87,3 +87,14 @@ export function evaluate(stage: Stage | null, design: Design, world: World): Eva
   ];
   return { cleared, stars: checks.filter((c) => c.ok).length, height, checks, fell };
 }
+
+/**
+ * クリアしたが星3つに届かなかったときの注意（チャレンジの結果カードで「なぜ？」の前に出す）。
+ * 倒れなかっただけでは本物の建物として十分ではないことに気づかせる。注意がなければ null。
+ */
+export function safetyNote(ev: Evaluation): string | null {
+  if (!ev.cleared || ev.stars >= 3) return null;
+  if (!ev.checks[1].ok) return '倒れなかったけれど、こわれた所があります。本物の建物なら、大きな修理が必要です。';
+  if (!ev.checks[2].ok) return '倒れなかったけれど、揺れ幅が大きめです。本物の建物なら、中の人や家具が危険です。';
+  return null;
+}
