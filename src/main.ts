@@ -8,32 +8,16 @@ import { distanceToSegment } from './physics/geometry';
 import { canStartTest, evaluate } from './game/evaluate';
 import { breakAdvice, judgePrediction, describeMember, type Prediction } from './game/predict';
 import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
-import RANKING_FORM_SCRIPT from './teacher/rankingForm.gs?raw';
-import { fetchRanking, isMine, RankingSheetError } from './game/classRanking';
-import { buildSubmitUrl, classLinkFor, parseFormTemplate, parseRankingUrl, readClassLink, validateTemplate, type FormTemplate } from './game/classForm';
-import {
-  clearClassForm,
-  loadAttempts,
-  loadClassForm,
-  loadDesign,
-  loadLastStage,
-  loadNotes,
-  loadProgress,
-  logAttempt,
-  recordResult,
-  saveClassForm,
-  saveDesign,
-  saveLastStage,
-  saveNotes,
-} from './game/progress';
-import { ANSWER_MAX, canvasToBlob, cardFileName, drawReflectionCard, loadCardFonts } from './game/reflectionCard';
+import { loadDesign, loadLastStage, loadProgress, logAttempt, recordResult, saveDesign, saveLastStage } from './game/progress';
 import { APP_LICENSE, AUTHOR, CHANGELOG, MIT_TEXT, THIRD_PARTY } from './game/about';
 import { CHAPTER_NAMES, nextStage, stageById, stageFullTitle, stageLabel, STAGES, type Stage } from './game/stages';
+import { $, closeOnBackdrop, el } from './ui/dom';
+import { setupClassPanel, type LastResult } from './ui/classPanel';
+import { setupReflectionSheet } from './ui/reflectionSheet';
 import { drawAimRing, drawDesign, drawLoupe, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
 
 const FREE_ID = 'free';
 
-const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const canvas = $<HTMLCanvasElement>('canvas');
 const ctx = canvas.getContext('2d')!;
 const hint = $<HTMLParagraphElement>('hint');
@@ -51,7 +35,6 @@ const replayBar = $<HTMLDivElement>('replay-bar');
 const replaySeek = $<HTMLInputElement>('replay-seek');
 const replayPlay = $<HTMLButtonElement>('replay-play');
 const replaySpeed = $<HTMLSelectElement>('replay-speed');
-const sheet = $<HTMLDivElement>('sheet');
 
 /** null のときは「自由に作る」モード */
 let stage: Stage | null = null;
@@ -67,7 +50,7 @@ let frames: Frame[] = [];
 let replayTime = 0;
 let replayPlaying = false;
 /** いちばん最近の試験結果（クラスに送る用） */
-let lastResult: { stage: string; height: number; stars: number; cost: number; result: string } | null = null;
+let lastResult: LastResult | null = null;
 let viewport: Viewport = makeViewport(1, 1);
 /** 画面に映す高さ（m）。ステージに合わせて拡大する */
 let viewMaxY: number = VIEW.maxY;
@@ -88,13 +71,6 @@ const goalHeight = () => stage?.goalHeight ?? 0;
 const allowedMaterials = () => stage?.materials ?? MATERIAL_IDS;
 const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const starText = (n: number) => '★'.repeat(n) + `<span class="off">${'★'.repeat(3 - n)}</span>`;
-
-/** 画面をおおう窓（ダイアログ）の外側をタップしたら閉じる */
-function closeOnBackdrop(dialog: HTMLElement): void {
-  dialog.addEventListener('click', (e) => {
-    if (e.target === dialog) dialog.hidden = true;
-  });
-}
 
 // ---------- ステージの切り替え ----------
 
@@ -131,8 +107,8 @@ function openStage(s: Stage | null): void {
   startBtn.textContent = s?.wind ? '強風スタート！' : '地震スタート！';
   $('toggle-iso').hidden = !!s && !s.isolation;
   $('open-sheet').hidden = s?.chapter !== 'challenge';
-  refreshRankingButtons();
-  sheet.hidden = true;
+  classPanel.refreshRankingButtons();
+  sheet.hide();
   buildMaterialButtons();
   refreshPanel();
 }
@@ -448,8 +424,8 @@ function showResult(w: World): void {
     const partly = ev.fell === 'partly' ? '建物の一部が折れて、元の高さから落ちました。くずれた所がある建物は「倒れなかった」になりません。' : '';
     html += `<div class="lesson"><strong>見直そう</strong>${partly}スロー再生で、最初にこわれた所（黄色の輪）を確かめよう。${advice ? escapeHtml(advice) : stage ? escapeHtml(stage.hint) : ''}</div>`;
   }
-  const canSend = lastResult !== null && classForm() !== null;
-  const canRank = isChallenge && !!classForm()?.ranking;
+  const canSend = lastResult !== null && classPanel.classForm() !== null;
+  const canRank = isChallenge && !!classPanel.classForm()?.ranking;
   html += `<div class="buttons">${canSend ? '<button type="button" data-act="send">クラスに送る</button>' : ''}${canRank ? '<button type="button" data-act="ranking">ランキングを見る</button>' : ''}<button type="button" data-act="replay">スロー再生で見る</button>`;
   // チャレンジでは、次の章（発展）へ進まず、同じタワーを改良するのを主なボタンにする
   if (isChallenge) html += `<button type="button" data-act="sheet">ふりかえりを書く</button><button type="button" class="primary" data-act="rebuild">もっと高くする</button>`;
@@ -464,9 +440,9 @@ function showResult(w: World): void {
   resultBox.hidden = false;
   placeResultBox(w);
   resultBox.querySelector('[data-act=replay]')?.addEventListener('click', startReplay);
-  resultBox.querySelector('[data-act=send]')?.addEventListener('click', openSend);
-  resultBox.querySelector('[data-act=ranking]')?.addEventListener('click', openRanking);
-  resultBox.querySelector('[data-act=sheet]')?.addEventListener('click', openSheet);
+  resultBox.querySelector('[data-act=send]')?.addEventListener('click', classPanel.openSend);
+  resultBox.querySelector('[data-act=ranking]')?.addEventListener('click', classPanel.openRanking);
+  resultBox.querySelector('[data-act=sheet]')?.addEventListener('click', sheet.open);
   resultBox.querySelector('[data-act=rebuild]')?.addEventListener('click', backToBuild);
   resultBox.querySelector('[data-act=next]')?.addEventListener('click', () => next && openStage(next));
   resultBox.querySelector('[data-act=menu]')?.addEventListener('click', openMenu);
@@ -551,27 +527,7 @@ $('replay-break').addEventListener('click', () => {
 });
 $('replay-close').addEventListener('click', closeReplay);
 
-// ---------- ふりかえりシート（最高タワーチャレンジのときだけ） ----------
-
-const QUESTIONS = [
-  { id: 'q1', text: '予想と結果をくらべて、気づいたことは？' },
-  { id: 'q2', text: '三角形（筋交い）を入れると強くなるのは、なぜだと思う？' },
-  { id: 'q3', text: '材料はどうやって選んだ？（強さ・重さ・費用のどれを大事にした？）' },
-  { id: 'q4', text: '班のみんなの作品で、よいと思った工夫は？' },
-];
-
-/** ふりかえりを書けるのは、最後の自由設計（最高タワーチャレンジ）だけ */
-const canReflect = () => stage?.chapter === 'challenge';
-
-/** シートを開いたときのビルの画面（画像に入れるもの） */
-const shotCanvas = document.createElement('canvas');
-const sheetMsg = $<HTMLParagraphElement>('sheet-msg');
-
-function challengeRecord(): string {
-  const best = loadProgress().challenge?.bestHeight;
-  const tries = loadAttempts().filter((a) => a.stageId === 'challenge').length;
-  return `${best ? `最高記録 ${best} m` : 'まだ記録なし'}（試験 ${tries} 回）`;
-}
+// ---------- ふりかえりシート・クラスランキング（src/ui/ にある画面） ----------
 
 /** 画像に写す範囲（キャンバスの画素）。高いステージは空が広いので、建物のまわりを切り出す */
 function shotRect(): { x: number; y: number; w: number; h: number } {
@@ -591,423 +547,24 @@ function shotRect(): { x: number; y: number; w: number; h: number } {
   return { x: px(left), y: px(Math.max(0, top)), w: px(Math.min(cssWidth, half * 2)), h: px(h) };
 }
 
-function openSheet(): void {
-  if (phase === 'test' || !canReflect()) return;
-  selectMember(null);
-  // 選んだ部材の光などを消してから写すため、1こま描き直すのを待つ
-  requestAnimationFrame(() => {
-    const r = shotRect();
-    shotCanvas.width = r.w;
-    shotCanvas.height = r.h;
-    shotCanvas.getContext('2d')!.drawImage(canvas, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h);
-    $<HTMLImageElement>('sheet-shot').src = shotCanvas.toDataURL('image/png');
-  });
-  const notes = loadNotes();
-  $('sheet-record').textContent = `${stage!.title}　${challengeRecord()}`;
-  const qs = $('sheet-questions');
-  qs.innerHTML = QUESTIONS.map(
-    (q, i) => `<label class="question">${i + 1}. ${q.text}<textarea rows="3" maxlength="${ANSWER_MAX}" data-note="${q.id}"></textarea></label>`,
-  ).join('');
-  sheet.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-note]').forEach((el) => {
-    el.value = notes[el.dataset.note!] ?? '';
-  });
-  sheetMsg.hidden = true;
-  $('sheet-share').hidden = !canShareFiles();
-  sheet.hidden = false;
-  fitAllTextareas();
-}
-
-/** 書いた分だけ欄を広げる */
-function fitTextarea(el: HTMLTextAreaElement): void {
-  el.style.height = 'auto';
-  el.style.height = `${el.scrollHeight + 2}px`;
-}
-const fitAllTextareas = () => sheet.querySelectorAll('textarea').forEach(fitTextarea);
-
-sheet.addEventListener('input', (e) => {
-  const el = e.target as HTMLInputElement | HTMLTextAreaElement;
-  if (!el.dataset.note) return;
-  sheetMsg.hidden = true;
-  if (el instanceof HTMLTextAreaElement) fitTextarea(el);
-  const notes = loadNotes();
-  notes[el.dataset.note] = el.value;
-  saveNotes(notes);
+const sheet = setupReflectionSheet({
+  canOpen: () => phase !== 'test' && stage?.chapter === 'challenge',
+  beforeShot: () => selectMember(null),
+  shotRect,
+  canvas,
+  stageTitle: () => stage?.title ?? '',
 });
 
-function canShareFiles(): boolean {
-  try {
-    const probe = new File([''], 'a.png', { type: 'image/png' });
-    return typeof navigator.share === 'function' && !!navigator.canShare?.({ files: [probe] });
-  } catch {
-    return false;
-  }
-}
-
-function showSheetMsg(text: string, ok = false): void {
-  sheetMsg.textContent = text;
-  sheetMsg.className = `class-msg ${ok ? 'ok' : 'ng'}`;
-  sheetMsg.hidden = false;
-}
-
-/** 名前・答え・ビルの画面を1枚の PNG にする。名前がなければ作らない */
-async function makeReflectionFile(): Promise<File | null> {
-  const notes = loadNotes();
-  const name = (notes.name ?? '').trim();
-  if (!name) {
-    showSheetMsg('名前を書いてから保存しよう。');
-    $<HTMLInputElement>('note-name').focus();
-    return null;
-  }
-  // 前の版で書いた長い答えも、画像にできる長さまでにする
-  const questions = QUESTIONS.map((q) => ({ text: q.text, answer: String(notes[q.id] ?? '').slice(0, ANSWER_MAX) }));
-  const empty = questions.filter((q) => !q.answer.trim()).length;
-  if (empty > 0 && !confirm(`まだ書いていない問いが ${empty} つあります。このまま保存しますか？`)) return null;
-  const now = new Date();
-  await loadCardFonts(name + (notes.group ?? '') + questions.map((q) => q.text + q.answer).join(''));
-  const card = drawReflectionCard({
-    name,
-    group: (notes.group ?? '').trim(),
-    stageTitle: stage!.title,
-    record: challengeRecord(),
-    date: `${now.getFullYear()}年${now.getMonth() + 1}月${now.getDate()}日`,
-    questions,
-    shot: shotCanvas,
-  });
-  const blob = await canvasToBlob(card);
-  return new File([blob], cardFileName(now), { type: 'image/png' });
-}
-
-/** 画像づくりの間はボタンを押せなくし、うまくいかなかったときは理由を見せる */
-async function withReflectionFile(btn: HTMLButtonElement, use: (file: File) => Promise<void> | void): Promise<void> {
-  if (btn.disabled) return;
-  btn.disabled = true;
-  try {
-    const file = await makeReflectionFile();
-    if (file) await use(file);
-  } catch {
-    showSheetMsg('画像を作れませんでした。答えを短くするか、ページを開き直してもう一度ためしてください。');
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-const sheetSave = $<HTMLButtonElement>('sheet-save');
-sheetSave.addEventListener('click', () =>
-  withReflectionFile(sheetSave, (file) => {
-    const url = URL.createObjectURL(file);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = file.name;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    showSheetMsg(`「${file.name}」を保存しました（「ダウンロード」フォルダ）。この画像を提出しよう。`, true);
-  }),
-);
-const sheetShare = $<HTMLButtonElement>('sheet-share');
-sheetShare.addEventListener('click', () =>
-  withReflectionFile(sheetShare, async (file) => {
-    try {
-      await navigator.share({ files: [file], title: '最高タワー工房 ふりかえり' });
-    } catch (e) {
-      // 共有の画面を閉じただけのときは何もしない
-      if ((e as Error)?.name !== 'AbortError') showSheetMsg('共有できませんでした。「画像で保存する」で保存して提出しよう。');
-    }
-  }),
-);
-$('open-sheet').addEventListener('click', openSheet);
-$('sheet-close').addEventListener('click', () => (sheet.hidden = true));
-$('sheet-clear').addEventListener('click', () => {
-  if (!confirm('ふりかえりに書いたことを全部消しますか？（名前は残ります）')) return;
-  // 名前・組班と、クラスに送るときのニックネームは残す
-  const { nickname, name, group } = loadNotes();
-  const keep: Record<string, string> = {};
-  if (nickname) keep.nickname = nickname;
-  if (name) keep.name = name;
-  if (group) keep.group = group;
-  saveNotes(keep);
-  openSheet();
+const classPanel = setupClassPanel({
+  isChallenge: () => stage?.chapter === 'challenge',
+  closeMenu: () => (menu.hidden = true),
+  lastResult: () => lastResult,
+  setHint: (text) => (hint.textContent = text),
 });
-closeOnBackdrop(sheet);
-
-// ---------- クラスランキング（先生の Google フォーム） ----------
-
-const classDialog = $<HTMLDivElement>('class-dialog');
-const sendDialog = $<HTMLDivElement>('send-dialog');
-const classInput = $<HTMLTextAreaElement>('class-input');
-const classMsg = $<HTMLParagraphElement>('class-msg');
-const sendName = $<HTMLInputElement>('send-name');
-const sendGroup = $<HTMLInputElement>('send-group');
-
-const classForm = (): FormTemplate | null => validateTemplate(loadClassForm());
-
-function refreshClassStatus(): void {
-  const t = classForm();
-  $('class-status').textContent = t
-    ? `クラスランキング：設定ずみ（結果カードの「クラスに送る」で記録を送れます${t.ranking ? '。ランキングもアプリで見られます' : ''}）`
-    : '';
-  refreshRankingButtons();
-}
-
-/** ランキングを見るボタンは、先生がランキングの公開まで設定したときだけ出す */
-function refreshRankingButtons(): void {
-  const has = !!classForm()?.ranking;
-  $('menu-ranking').hidden = !has;
-  $('open-ranking').hidden = !has || stage?.chapter !== 'challenge';
-}
-
-// ---------- アプリ内のクラスランキング ----------
-
-const rankingDialog = $<HTMLDivElement>('ranking-dialog');
-const rankingMsg = $<HTMLParagraphElement>('ranking-msg');
-const rankingTable = $<HTMLTableElement>('ranking-table');
-let rankingLoad: AbortController | null = null;
-
-async function loadRanking(): Promise<void> {
-  const url = classForm()?.ranking;
-  if (!url) return;
-  rankingLoad?.abort();
-  const ctrl = new AbortController();
-  rankingLoad = ctrl;
-  const timer = setTimeout(() => ctrl.abort(), 15000);
-  rankingMsg.className = 'class-msg';
-  rankingMsg.textContent = '読みこみ中…';
-  try {
-    let data;
-    try {
-      data = await fetchRanking(url, ctrl.signal);
-    } catch (e) {
-      if (ctrl.signal.aborted || e instanceof RankingSheetError) throw e;
-      // クラス全員がいっせいに開くと、先生のウェブアプリが混み合うことがある。少しずらして1回だけ読み直す
-      await new Promise((r) => setTimeout(r, 1000 + Math.random() * 2000));
-      if (ctrl.signal.aborted) throw e;
-      data = await fetchRanking(url, ctrl.signal);
-    }
-    if (rankingLoad !== ctrl) return;
-    const notes = loadNotes();
-    const body = $('ranking-body');
-    body.replaceChildren(
-      ...data.rows.map((r) => {
-        const tr = document.createElement('tr');
-        if (r.rank <= 3) tr.classList.add('podium');
-        if (isMine(r, notes.nickname ?? '', notes.group ?? '')) tr.classList.add('mine');
-        for (const v of [`${r.rank}`, r.group, r.name, `${r.height} m`]) {
-          const td = document.createElement('td');
-          td.textContent = v;
-          tr.append(td);
-        }
-        return tr;
-      }),
-    );
-    rankingTable.hidden = data.rows.length === 0;
-    rankingMsg.textContent = data.rows.length === 0 ? 'まだ記録がありません。結果カードの「クラスに送る」で送ってみよう。' : '';
-    const more = data.total > data.rows.length ? `（上位 ${data.rows.length} 人を表示、全部で ${data.total} 人）` : `（${data.total} 人）`;
-    $('ranking-updated').textContent = `${data.updated ? `${data.updated.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} 現在` : ''}${more}`;
-  } catch (e) {
-    if (rankingLoad !== ctrl) return;
-    rankingMsg.className = 'class-msg ng';
-    rankingMsg.textContent =
-      e instanceof RankingSheetError
-        ? 'ランキングを読みこめませんでした。先生に知らせてください。（先生へ：ランキングのスプレッドシートが見つからないか、開けません。スクリプトの createRankingForm を実行したアカウントでデプロイしているか確かめてください）'
-        : 'ランキングを読みこめませんでした。インターネットにつながっているか確かめて、「更新する」を押してください。直らないときは先生に知らせてください。（先生へ：ウェブアプリの「アクセスできるユーザー」が「全員」になっているか確かめてください）';
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function openRanking(): void {
-  if (!classForm()?.ranking) return;
-  menu.hidden = true;
-  rankingDialog.hidden = false;
-  void loadRanking();
-}
-
-$('ranking-reload').addEventListener('click', () => void loadRanking());
-$('ranking-close').addEventListener('click', () => {
-  rankingLoad?.abort();
-  rankingLoad = null;
-  rankingDialog.hidden = true;
-});
-$('open-ranking').addEventListener('click', openRanking);
-$('menu-ranking').addEventListener('click', openRanking);
-
-function showClassLink(t: FormTemplate | null): void {
-  $('class-link-box').hidden = !t;
-  if (!t) return;
-  $<HTMLTextAreaElement>('class-link').value = classLinkFor(location.href, t);
-  const msg = $('class-ranking-msg');
-  if (t.ranking) {
-    rankingInput.value = t.ranking;
-    msg.textContent = 'ランキングの読み先が入っています。このクラスリンクを配ると、生徒もアプリの中でランキングを見られます。';
-    msg.className = 'class-msg ok';
-  } else {
-    rankingInput.value = '';
-    msg.textContent = '';
-    msg.className = 'class-msg';
-  }
-}
-
-const rankingInput = $<HTMLInputElement>('class-ranking');
-rankingInput.addEventListener('input', () => {
-  const t = classForm();
-  const msg = $('class-ranking-msg');
-  if (!t) return;
-  const v = rankingInput.value.trim();
-  if (!v) {
-    if (t.ranking) {
-      const { ranking: _drop, ...rest } = t;
-      void _drop;
-      saveClassForm(rest);
-      showClassLink(rest);
-      refreshClassStatus();
-    }
-    return;
-  }
-  const url = parseRankingUrl(v);
-  if (!url) {
-    msg.textContent = 'ウェブアプリの URL ではありません。Apps Script の「デプロイ」→「デプロイを管理」で出る、https://script.google.com/ で始まり /exec で終わる URL を貼ってください。';
-    msg.className = 'class-msg ng';
-    return;
-  }
-  const next = { ...t, ranking: url };
-  saveClassForm(next);
-  showClassLink(next);
-  refreshClassStatus();
-});
-
-function openClassDialog(): void {
-  classInput.value = '';
-  classMsg.textContent = '';
-  classMsg.className = 'class-msg';
-  const t = classForm();
-  if (t) {
-    classMsg.textContent = 'この端末は設定ずみです。別のフォームにするときは、新しいリンクを貼ってください。';
-    classMsg.className = 'class-msg ok';
-  }
-  showClassLink(t);
-  menu.hidden = true;
-  classDialog.hidden = false;
-}
-
-classInput.addEventListener('input', () => {
-  if (!classInput.value.trim()) return;
-  const r = parseFormTemplate(classInput.value);
-  if (!r.ok) {
-    classMsg.textContent = r.reason;
-    classMsg.className = 'class-msg ng';
-    return;
-  }
-  saveClassForm(r.template);
-  const extra = r.unused.length > 0 ? `（${r.unused.length}つの質問はなしで送ります）` : '';
-  classMsg.textContent = `読み取れました${extra}。下のクラスリンクを生徒に配ってください。`;
-  classMsg.className = 'class-msg ok';
-  showClassLink(r.template);
-  refreshClassStatus();
-});
-
-const classCopy = $<HTMLButtonElement>('class-copy');
-classCopy.addEventListener('click', async () => {
-  const box = $<HTMLTextAreaElement>('class-link');
-  try {
-    await navigator.clipboard.writeText(box.value);
-    classCopy.textContent = 'コピーしました';
-  } catch {
-    box.select();
-    classCopy.textContent = '選んだ所をコピーしてください';
-  }
-  setTimeout(() => (classCopy.textContent = 'リンクをコピー'), 2000);
-});
-const scriptCopy = $<HTMLButtonElement>('class-script-copy');
-scriptCopy.addEventListener('click', async () => {
-  try {
-    await navigator.clipboard.writeText(RANKING_FORM_SCRIPT);
-    scriptCopy.textContent = 'コピーしました';
-  } catch {
-    // 古い方法でコピーする
-    const tmp = document.createElement('textarea');
-    tmp.value = RANKING_FORM_SCRIPT;
-    document.body.append(tmp);
-    tmp.select();
-    const ok = document.execCommand('copy');
-    tmp.remove();
-    scriptCopy.textContent = ok ? 'コピーしました' : 'コピーできませんでした';
-  }
-  setTimeout(() => (scriptCopy.textContent = 'フォームを作るスクリプトをコピー'), 3000);
-});
-$('class-test').addEventListener('click', () => {
-  const t = classForm();
-  if (!t) return;
-  const url = buildSubmitUrl(t, { name: 'テスト', group: '先生', stage: 'チャレンジ 最高タワーチャレンジ', height: '0', stars: '0', cost: '0', result: 'ためし' });
-  if (!openTab(url)) {
-    classMsg.className = 'class-msg ng';
-    showFallbackLink(classMsg, url);
-  }
-});
-$('class-forget').addEventListener('click', () => {
-  if (!confirm('この端末のクラスランキングの設定を消しますか？')) return;
-  clearClassForm();
-  openClassDialog();
-  refreshClassStatus();
-});
-$('class-close').addEventListener('click', () => (classDialog.hidden = true));
-$('open-class').addEventListener('click', openClassDialog);
-
-function openSend(): void {
-  if (!lastResult) return;
-  const notes = loadNotes();
-  sendName.value = notes.nickname ?? '';
-  sendGroup.value = notes.group ?? '';
-  $('send-summary').textContent = `${lastResult.stage}　高さ ${lastResult.height} m・星 ${lastResult.stars}・費用 ${lastResult.cost} 万円（${lastResult.result}）${lastResult.height === 0 ? '　※クリアしないと高さの記録は 0 m です' : ''}`;
-  $('send-fallback').hidden = true;
-  sendDialog.hidden = false;
-  sendName.focus();
-}
-
-$('send-cancel').addEventListener('click', () => (sendDialog.hidden = true));
-$('send-go').addEventListener('click', () => {
-  const t = classForm();
-  const name = sendName.value.trim();
-  const group = sendGroup.value.trim();
-  if (!t || !lastResult) return;
-  if (!name) {
-    $('send-summary').textContent = 'ニックネームを入れてください。';
-    return;
-  }
-  const notes = loadNotes();
-  notes.nickname = name;
-  notes.group = group;
-  saveNotes(notes);
-  const url = buildSubmitUrl(t, {
-    name,
-    group,
-    stage: lastResult.stage,
-    height: String(lastResult.height),
-    stars: String(lastResult.stars),
-    cost: String(lastResult.cost),
-    result: lastResult.result,
-  });
-  if (!openTab(url)) {
-    // ダイアログは閉じずに、リンクを押してもらう
-    showFallbackLink($('send-fallback'), url);
-    return;
-  }
-  sendDialog.hidden = true;
-  hint.textContent = '開いたフォームで「送信」を押してください。';
-});
-closeOnBackdrop(classDialog);
-closeOnBackdrop(sendDialog);
 
 // ---------- このアプリについて（作者・更新履歴・ライセンス） ----------
 
 const aboutDialog = $<HTMLDivElement>('about-dialog');
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, cls?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  if (cls) e.className = cls;
-  return e;
-}
 
 function buildAbout(): void {
   $('about-version').textContent = `ver.${CHANGELOG[0].version}`;
@@ -1044,28 +601,6 @@ $('open-about').addEventListener('click', () => (aboutDialog.hidden = false));
 $('about-close').addEventListener('click', () => (aboutDialog.hidden = true));
 closeOnBackdrop(aboutDialog);
 
-/**
- * 新しいタブでフォームを開く。ポップアップがブロックされて開けなかったら false。
- * （'noopener' をつけると開けたかどうか分からないので、開いてから opener を切る）
- */
-function openTab(url: string): boolean {
-  const w = window.open(url, '_blank');
-  if (!w) return false;
-  w.opener = null;
-  return true;
-}
-
-/** 開けなかったときに、押せばフォームが開くリンクを見せる */
-function showFallbackLink(box: HTMLElement, url: string): void {
-  box.replaceChildren('新しいタブを開けませんでした。ここを押してフォームを開いてください：');
-  const a = el('a', 'フォームを開く');
-  a.href = url;
-  a.target = '_blank';
-  a.rel = 'noopener';
-  box.append(a);
-  box.hidden = false;
-}
-
 // ---------- 遊び方 ----------
 
 const howtoDialog = $<HTMLDivElement>('howto-dialog');
@@ -1088,19 +623,6 @@ $('open-howto').addEventListener('click', () => openHowto());
 $('howto-close').addEventListener('click', closeHowto);
 howtoDialog.addEventListener('click', (e) => {
   if (e.target === howtoDialog) closeHowto();
-});
-
-/** クラスリンクから開いたときは、先生のフォームの設定を読みこむ */
-function loadClassLinkFromUrl(): void {
-  const t = readClassLink(location.hash);
-  if (!t) return;
-  saveClassForm(t);
-  history.replaceState(null, '', location.pathname + location.search);
-}
-// アプリを開いたままクラスリンクを開き直したとき（# のあとだけ変わり、ページは読み直されない）も設定を読む
-window.addEventListener('hashchange', () => {
-  loadClassLinkFromUrl();
-  refreshClassStatus();
 });
 
 // ---------- 入力 ----------
@@ -1497,8 +1019,8 @@ function currentShift(w: World): number {
 }
 
 resize();
-loadClassLinkFromUrl();
-refreshClassStatus();
+classPanel.loadClassLinkFromUrl();
+classPanel.refreshClassStatus();
 const lastId = loadLastStage();
 if (lastId === FREE_ID) openStage(null);
 else openStage(stageById(lastId ?? '') ?? STAGES[0]);
