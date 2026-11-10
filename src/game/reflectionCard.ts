@@ -15,6 +15,8 @@ export interface ReflectionCard {
 }
 
 export const CARD_WIDTH = 1200;
+/** 1つの答えの最大の文字数（長すぎると画像が大きくなりすぎて作れない） */
+export const ANSWER_MAX = 400;
 const PAD = 48;
 const FONT = "'Zen Kaku Gothic New', 'Hiragino Sans', sans-serif";
 const DISPLAY = "'Dela Gothic One', 'Hiragino Sans', sans-serif";
