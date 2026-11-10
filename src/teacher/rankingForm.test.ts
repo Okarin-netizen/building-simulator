@@ -32,6 +32,14 @@ function chain(overrides: Record<string, unknown> = {}): any {
   });
 }
 
+/** CacheService と LockService のまねもの */
+function cacheMocks(store: Record<string, string> = {}) {
+  return {
+    CacheService: { getScriptCache: () => ({ get: (k: string) => store[k] ?? null, put: (k: string, v: string) => (store[k] = v) }) },
+    LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => undefined }) },
+  };
+}
+
 describe('先生用：ランキングのフォームを作るスクリプト', () => {
   test('質問と置きかえる言葉が、アプリの classForm.ts とそろっている', () => {
     const { RANKING_QUESTIONS } = load();
@@ -228,10 +236,51 @@ describe('先生用スクリプト：前の版で作ったフォームでもラ�
       DriveApp: { getFilesByName: () => { let i = 0; return { hasNext: () => i < files.length, next: () => files[i++] }; } },
       SpreadsheetApp: { openById: (id: string) => ((opened = id), { getSheets: () => [sheet] }) },
       ContentService: { createTextOutput: (t: string) => ((body = t), out), MimeType: { JSON: 'json' } },
+      ...cacheMocks(),
     }) as any;
     doGet();
     expect(opened).toBe('NEW');
     expect(props.SHEET_ID).toBe('NEW');
     expect(JSON.parse(body).rows).toEqual([{ rank: 1, group: '', name: 'たろう', height: 9 }]);
+  });
+
+  test('ランキングは覚えておき、いっせいに開いてもスプレッドシートは1回しか読まない', () => {
+    let reads = 0;
+    let body = '';
+    const out: any = { setMimeType: () => out };
+    const sheet = {
+      getFormUrl: () => 'form',
+      getDataRange: () => ({
+        getValues: () => (reads++, [['タイムスタンプ', 'ニックネーム', '組・班', 'ステージ', '高さ（m）'], ['', 'はなこ', '1組', 'チャレンジ 最高タワーチャレンジ', 12]]),
+      }),
+    };
+    const store: Record<string, string> = {};
+    const { doGet } = load({
+      PropertiesService: { getScriptProperties: () => ({ getProperty: () => 'ID', setProperty: () => undefined }) },
+      SpreadsheetApp: { openById: () => ({ getSheets: () => [sheet] }) },
+      ContentService: { createTextOutput: (t: string) => ((body = t), out), MimeType: { JSON: 'json' } },
+      ...cacheMocks(store),
+    }) as any;
+    for (let i = 0; i < 40; i++) doGet();
+    expect(reads).toBe(1);
+    expect(JSON.parse(body).rows).toEqual([{ rank: 1, group: '1組', name: 'はなこ', height: 12 }]);
+  });
+
+  test('スプレッドシートを読めなかったときは覚えず、次の人がもう一度読む', () => {
+    let tries = 0;
+    let body = '';
+    const out: any = { setMimeType: () => out };
+    const store: Record<string, string> = {};
+    const { doGet } = load({
+      PropertiesService: { getScriptProperties: () => ({ getProperty: () => 'ID', setProperty: () => undefined }) },
+      SpreadsheetApp: { openById: () => { tries++; throw new Error('no'); } },
+      ContentService: { createTextOutput: (t: string) => ((body = t), out), MimeType: { JSON: 'json' } },
+      ...cacheMocks(store),
+    }) as any;
+    doGet();
+    doGet();
+    expect(tries).toBe(2);
+    expect(JSON.parse(body).error).toBeTruthy();
+    expect(Object.keys(store)).toEqual([]);
   });
 });

@@ -774,7 +774,16 @@ async function loadRanking(): Promise<void> {
   rankingMsg.className = 'class-msg';
   rankingMsg.textContent = '読みこみ中…';
   try {
-    const data = await fetchRanking(url, ctrl.signal);
+    let data;
+    try {
+      data = await fetchRanking(url, ctrl.signal);
+    } catch (e) {
+      if (ctrl.signal.aborted || e instanceof RankingSheetError) throw e;
+      // クラス全員がいっせいに開くと、先生のウェブアプリが混み合うことがある。少しずらして1回だけ読み直す
+      await new Promise((r) => setTimeout(r, 1000 + Math.random() * 2000));
+      if (ctrl.signal.aborted) throw e;
+      data = await fetchRanking(url, ctrl.signal);
+    }
     if (rankingLoad !== ctrl) return;
     const notes = loadNotes();
     const body = $('ranking-body');
