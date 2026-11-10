@@ -21,6 +21,7 @@
         <div class="top-actions">
           <button type="button" id="open-howto" class="ghost">遊び方</button>
           <button type="button" id="open-sheet" class="ghost">ふりかえり</button>
+          <button type="button" id="open-ranking" class="ghost" hidden>ランキング</button>
           <button type="button" id="open-menu" class="ghost">ステージ一覧</button>
           <button type="button" id="open-about" class="ghost">このアプリについて</button>
         </div>
@@ -149,6 +150,7 @@
         <div id="menu-list"></div>
         <div class="menu-free">
           <button type="button" id="free-mode">自由に作る（実験モード）</button>
+          <button type="button" id="menu-ranking" hidden>クラスランキングを見る</button>
           <button type="button" id="open-class">先生用：クラスランキングの設定</button>
         </div>
         <p class="class-status" id="class-status"></p>
@@ -236,6 +238,7 @@
           <li><a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">Google Apps Script</a> で新しいプロジェクトを開き、中の文字を消して貼りつける</li>
           <li>「実行」を押し、自分のアカウントで許可する（「確認されていません」と出たら「詳細」→「移動」）</li>
           <li>実行ログに出る<b>クラスリンク</b>を生徒に配る。フォームと回答のスプレッドシートが先生のドライブにでき、「ランキング」シートにチャレンジの記録が高い順に自動で並びます</li>
+          <li>アプリの中でもランキングを見せるときは、Apps Script の「デプロイ」→「新しいデプロイ」→「ウェブアプリ」で、アクセスできるユーザーを「全員」にしてデプロイする。次に関数を <code>makeClassLink</code> にして「実行」し、ログに出る新しいクラスリンクを配る（見えるのは順位・組班・ニックネーム・高さだけ）</li>
         </ol>
         <details class="class-manual">
           <summary>自分でフォームを作るときは</summary>
@@ -280,6 +283,25 @@
         <div class="buttons sheet-actions">
           <button type="button" id="send-cancel">やめる</button>
           <button type="button" id="send-go" class="primary">フォームを開く</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="menu" id="ranking-dialog" hidden>
+      <div class="menu-card ranking-card">
+        <h2>クラスランキング</h2>
+        <p class="note">最高タワーチャレンジの記録を、一人ひとりの一番高い記録で並べています。倒れた・くずれた試験は 0 m です。</p>
+        <p class="class-msg" id="ranking-msg"></p>
+        <div class="ranking-scroll">
+          <table class="ranking-table" id="ranking-table" hidden>
+            <thead><tr><th>順位</th><th>組・班</th><th>ニックネーム</th><th>高さ</th></tr></thead>
+            <tbody id="ranking-body"></tbody>
+          </table>
+        </div>
+        <p class="note" id="ranking-updated"></p>
+        <div class="buttons sheet-actions">
+          <button type="button" id="ranking-reload">更新する</button>
+          <button type="button" id="ranking-close" class="primary">閉じる</button>
         </div>
       </div>
     </div>

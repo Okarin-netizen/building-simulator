@@ -14,7 +14,7 @@ function load(globals: Record<string, unknown> = {}) {
   const names = Object.keys(globals);
   const factory = new Function(
     ...names,
-    `${SOURCE}\nreturn { createRankingForm, buildClassLink_, RANKING_QUESTIONS, APP_URL };`,
+    `${SOURCE}\nreturn { createRankingForm, makeClassLink, buildClassLink_, computeRanking_, RANKING_QUESTIONS, APP_URL };`,
   );
   return factory(...names.map((n) => globals[n])) as {
     createRankingForm: () => string;
@@ -85,6 +85,7 @@ describe('先生用：ランキングのフォームを作るスクリプト', (
     let entry = 100;
     const prefillAnswers: string[] = [];
     const formulas: string[] = [];
+    const props: Record<string, string> = {};
     const sheetNames: string[] = [];
     const textItem = () => {
       const id = `entry.${++entry}`;
@@ -125,14 +126,88 @@ describe('先生用：ランキングのフォームを作るスクリプト', (
       FormApp: { create: () => form, DestinationType: { SPREADSHEET: 'SPREADSHEET' } },
       SpreadsheetApp: { create: () => ss, openById: () => ss, flush: () => {} },
       Logger: { log: () => {} },
+      PropertiesService: { getScriptProperties: () => ({ setProperties: (p: Record<string, string>) => Object.assign(props, p) }) },
     });
 
     const link = createRankingForm();
+    expect(props.SHEET_ID).toBe('SS');
+    expect(props.PREFILLED_URL).toContain('usp=pp_url');
     expect(sheetNames).toEqual(['ランキング', '先生用メモ']);
     expect(formulas.join('\n')).toContain("'フォームの回答 1'!B2:B");
     expect(formulas.join('\n')).toContain('最高タワー');
     const t = readClassLink(link.slice(APP_URL.length));
     expect(t?.url).toBe('https://docs.google.com/forms/d/e/FORM_ID/viewform');
     expect(Object.keys(t!.entries).sort()).toEqual(Object.keys(FIELDS).sort());
+  });
+});
+
+describe('先生用スクリプト：アプリ内ランキング', () => {
+  const HEAD = ['タイムスタンプ', 'ニックネーム', '組・班', 'ステージ', '高さ（m）', '星の数', '費用（万円）', '結果'];
+  const row = (name: string, group: string, stage: string, height: unknown, result = 'クリア') => [new Date(), name, group, stage, height, 3, 200, result];
+  const CH = 'チャレンジ 最高タワーチャレンジ';
+
+  test('チャレンジの記録だけを、一人ひとりの最高の高さで並べる（同じ高さは同じ順位）', () => {
+    const { computeRanking_ } = load() as any;
+    const r = computeRanking_(
+      [
+        HEAD,
+        row('たろう', '1-1', CH, 9),
+        row('たろう', '1-1', CH, 12),
+        row('はなこ', '1-2', CH, 12),
+        row('じろう', '', CH, '6'),
+        row('じろう', '', '1-1 ななめの1本', 30),
+        row('先生テスト', '先生', CH, 0, 'ためし'),
+        row('', '1-1', CH, 99),
+        row('さぶろう', '1-3', CH, 0, '倒れた'),
+      ],
+      50,
+    );
+    expect(r.total).toBe(4);
+    expect(r.rows).toEqual([
+      { rank: 1, group: '1-1', name: 'たろう', height: 12 },
+      { rank: 1, group: '1-2', name: 'はなこ', height: 12 },
+      { rank: 3, group: '', name: 'じろう', height: 6 },
+      { rank: 4, group: '1-3', name: 'さぶろう', height: 0 },
+    ]);
+    // 時刻や費用などは返さない
+    expect(Object.keys(r.rows[0]).sort()).toEqual(['group', 'height', 'name', 'rank']);
+  });
+
+  test('件数の上限を守り、列の順番が変わっても見出しで探す', () => {
+    const { computeRanking_ } = load() as any;
+    const head = ['高さ（m）', 'ステージ', 'ニックネーム', 'タイムスタンプ'];
+    const rows = Array.from({ length: 5 }, (_, i) => [i, CH, `n${i}`, new Date()]);
+    const r = computeRanking_([head, ...rows], 3);
+    expect(r.total).toBe(5);
+    expect(r.rows.map((x: { name: string }) => x.name)).toEqual(['n4', 'n3', 'n2']);
+    expect(computeRanking_([['ちがう見出し']], 3)).toEqual({ rows: [], total: 0 });
+  });
+
+  test('makeClassLink：デプロイしたウェブアプリの URL を入れたクラスリンクを作る', () => {
+    const props: Record<string, string> = {
+      SHEET_ID: 'SS',
+      PREFILLED_URL: 'https://docs.google.com/forms/d/e/X/viewform?usp=pp_url&entry.1=NAME&entry.2=STAGE&entry.3=HEIGHT',
+    };
+    const make = (serviceUrl: string | null) =>
+      (load({
+        PropertiesService: { getScriptProperties: () => ({ getProperty: (k: string) => props[k] ?? null }) },
+        ScriptApp: { getService: () => ({ getUrl: () => serviceUrl }) },
+        SpreadsheetApp: { openById: () => chain({ getSheetByName: () => null }) },
+        Logger: { log: () => {} },
+      }) as any).makeClassLink() as string;
+    const link = make('https://script.google.com/macros/s/AKfy/dev');
+    expect(readClassLink(link.slice(link.indexOf('#')))?.ranking).toBe('https://script.google.com/macros/s/AKfy/exec');
+    expect(() => make(null)).toThrow('デプロイ');
+  });
+
+  test('ウェブアプリの URL を入れたクラスリンクを、アプリが読める', () => {
+    const { buildClassLink_, APP_URL } = load();
+    const ranking = 'https://script.google.com/macros/s/AKfycbx-123_abc/exec';
+    const link = (buildClassLink_ as any)(
+      'https://docs.google.com/forms/d/e/X/viewform?entry.1=NAME&entry.2=STAGE&entry.3=HEIGHT',
+      APP_URL,
+      ranking,
+    );
+    expect(readClassLink(link.slice(link.indexOf('#')))?.ranking).toBe(ranking);
   });
 });

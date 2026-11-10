@@ -996,6 +996,69 @@ canvas {
   width: min(480px, 100%);
 }
 
+.ranking-card {
+  width: min(520px, 100%);
+}
+
+.ranking-scroll {
+  max-height: min(55vh, 520px);
+  overflow-y: auto;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+
+.ranking-scroll:has(table[hidden]) {
+  display: none;
+}
+
+.ranking-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+
+.ranking-table[hidden] {
+  display: none;
+}
+
+.ranking-table th {
+  position: sticky;
+  top: 0;
+  background: var(--yellow-soft);
+  font-size: 13px;
+  text-align: left;
+  padding: 6px 10px;
+}
+
+.ranking-table td {
+  padding: 6px 10px;
+  border-top: 1px solid var(--line);
+}
+
+.ranking-table td:first-child,
+.ranking-table th:first-child {
+  text-align: center;
+  width: 3.5em;
+  font-weight: 700;
+}
+
+.ranking-table td:last-child,
+.ranking-table th:last-child {
+  text-align: right;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ranking-table tr.podium td:first-child {
+  color: #8a5a00;
+}
+
+.ranking-table tr.mine td {
+  background: var(--yellow-soft);
+  font-weight: 700;
+}
+
 .send-summary {
   font-size: 15px;
   font-weight: 700;

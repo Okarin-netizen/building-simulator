@@ -9,6 +9,7 @@ import { canStartTest, evaluate } from './game/evaluate';
 import { breakAdvice, judgePrediction, describeMember, type Prediction } from './game/predict';
 import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
 import RANKING_FORM_SCRIPT from './teacher/rankingForm.gs?raw';
+import { fetchRanking, isMine } from './game/classRanking';
 import { buildSubmitUrl, classLinkFor, parseFormTemplate, readClassLink, validateTemplate, type FormTemplate } from './game/classForm';
 import {
   clearClassForm,
@@ -130,6 +131,7 @@ function openStage(s: Stage | null): void {
   startBtn.textContent = s?.wind ? '強風スタート！' : '地震スタート！';
   $('toggle-iso').hidden = !!s && !s.isolation;
   $('open-sheet').hidden = s?.chapter !== 'challenge';
+  refreshRankingButtons();
   sheet.hidden = true;
   buildMaterialButtons();
   refreshPanel();
@@ -447,7 +449,8 @@ function showResult(w: World): void {
     html += `<div class="lesson"><strong>見直そう</strong>${partly}スロー再生で、最初にこわれた所（黄色の輪）を確かめよう。${advice ? escapeHtml(advice) : stage ? escapeHtml(stage.hint) : ''}</div>`;
   }
   const canSend = lastResult !== null && classForm() !== null;
-  html += `<div class="buttons">${canSend ? '<button type="button" data-act="send">クラスに送る</button>' : ''}<button type="button" data-act="replay">スロー再生で見る</button>`;
+  const canRank = isChallenge && !!classForm()?.ranking;
+  html += `<div class="buttons">${canSend ? '<button type="button" data-act="send">クラスに送る</button>' : ''}${canRank ? '<button type="button" data-act="ranking">ランキングを見る</button>' : ''}<button type="button" data-act="replay">スロー再生で見る</button>`;
   // チャレンジでは、次の章（発展）へ進まず、同じタワーを改良するのを主なボタンにする
   if (isChallenge) html += `<button type="button" data-act="sheet">ふりかえりを書く</button><button type="button" class="primary" data-act="rebuild">もっと高くする</button>`;
   else html += `<button type="button" data-act="rebuild">組み立てにもどる</button>`;
@@ -462,6 +465,7 @@ function showResult(w: World): void {
   placeResultBox(w);
   resultBox.querySelector('[data-act=replay]')?.addEventListener('click', startReplay);
   resultBox.querySelector('[data-act=send]')?.addEventListener('click', openSend);
+  resultBox.querySelector('[data-act=ranking]')?.addEventListener('click', openRanking);
   resultBox.querySelector('[data-act=sheet]')?.addEventListener('click', openSheet);
   resultBox.querySelector('[data-act=rebuild]')?.addEventListener('click', backToBuild);
   resultBox.querySelector('[data-act=next]')?.addEventListener('click', () => next && openStage(next));
@@ -722,8 +726,82 @@ const sendGroup = $<HTMLInputElement>('send-group');
 const classForm = (): FormTemplate | null => validateTemplate(loadClassForm());
 
 function refreshClassStatus(): void {
-  $('class-status').textContent = classForm() ? 'クラスランキング：設定ずみ（結果カードの「クラスに送る」で記録を送れます）' : '';
+  const t = classForm();
+  $('class-status').textContent = t
+    ? `クラスランキング：設定ずみ（結果カードの「クラスに送る」で記録を送れます${t.ranking ? '。ランキングもアプリで見られます' : ''}）`
+    : '';
+  refreshRankingButtons();
 }
+
+/** ランキングを見るボタンは、先生がランキングの公開まで設定したときだけ出す */
+function refreshRankingButtons(): void {
+  const has = !!classForm()?.ranking;
+  $('menu-ranking').hidden = !has;
+  $('open-ranking').hidden = !has || stage?.chapter !== 'challenge';
+}
+
+// ---------- アプリ内のクラスランキング ----------
+
+const rankingDialog = $<HTMLDivElement>('ranking-dialog');
+const rankingMsg = $<HTMLParagraphElement>('ranking-msg');
+const rankingTable = $<HTMLTableElement>('ranking-table');
+let rankingLoad: AbortController | null = null;
+
+async function loadRanking(): Promise<void> {
+  const url = classForm()?.ranking;
+  if (!url) return;
+  rankingLoad?.abort();
+  const ctrl = new AbortController();
+  rankingLoad = ctrl;
+  const timer = setTimeout(() => ctrl.abort(), 15000);
+  rankingMsg.className = 'class-msg';
+  rankingMsg.textContent = '読みこみ中…';
+  try {
+    const data = await fetchRanking(url, ctrl.signal);
+    if (rankingLoad !== ctrl) return;
+    const notes = loadNotes();
+    const body = $('ranking-body');
+    body.replaceChildren(
+      ...data.rows.map((r) => {
+        const tr = document.createElement('tr');
+        if (r.rank <= 3) tr.classList.add('podium');
+        if (isMine(r, notes.nickname ?? '', notes.group ?? '')) tr.classList.add('mine');
+        for (const v of [`${r.rank}`, r.group, r.name, `${r.height} m`]) {
+          const td = document.createElement('td');
+          td.textContent = v;
+          tr.append(td);
+        }
+        return tr;
+      }),
+    );
+    rankingTable.hidden = data.rows.length === 0;
+    rankingMsg.textContent = data.rows.length === 0 ? 'まだ記録がありません。結果カードの「クラスに送る」で送ってみよう。' : '';
+    const more = data.total > data.rows.length ? `（上位 ${data.rows.length} 人を表示、全部で ${data.total} 人）` : `（${data.total} 人）`;
+    $('ranking-updated').textContent = `${data.updated ? `${data.updated.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} 現在` : ''}${more}`;
+  } catch {
+    if (rankingLoad !== ctrl) return;
+    rankingMsg.className = 'class-msg ng';
+    rankingMsg.textContent = 'ランキングを読みこめませんでした。インターネットにつながっているか確かめて、「更新する」を押してください。';
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function openRanking(): void {
+  if (!classForm()?.ranking) return;
+  menu.hidden = true;
+  rankingDialog.hidden = false;
+  void loadRanking();
+}
+
+$('ranking-reload').addEventListener('click', () => void loadRanking());
+$('ranking-close').addEventListener('click', () => {
+  rankingLoad?.abort();
+  rankingLoad = null;
+  rankingDialog.hidden = true;
+});
+$('open-ranking').addEventListener('click', openRanking);
+$('menu-ranking').addEventListener('click', openRanking);
 
 function showClassLink(t: FormTemplate | null): void {
   $('class-link-box').hidden = !t;

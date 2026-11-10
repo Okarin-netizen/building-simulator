@@ -26,6 +26,8 @@ export interface FormTemplate {
   url: string;
   /** 項目ごとの entry 番号（例：entry.123456） */
   entries: Partial<Record<FieldId, string>>;
+  /** アプリ内でランキングを見るための、先生の Apps Script ウェブアプリの URL（なくてもよい） */
+  ranking?: string;
 }
 
 export type ParseResult = { ok: true; template: FormTemplate; unused: FieldId[] } | { ok: false; reason: string };
@@ -36,6 +38,10 @@ const ENTRY_KEY = /^entry\.\d+$/;
 
 /** Google フォームの回答ページの URL か */
 const isFormUrl = (u: URL) => u.protocol === 'https:' && u.hostname === FORM_HOST && FORM_PATH.test(u.pathname);
+const RANKING_URL = /^https:\/\/script\.google\.com\/(?:a\/macros\/[\w.-]+|macros)\/s\/[\w-]+\/exec$/;
+/** 先生のランキング用ウェブアプリの URL か（ほかの所には問い合わせない） */
+export const isRankingUrl = (s: unknown): s is string => typeof s === 'string' && RANKING_URL.test(s);
+
 /** 送り先の URL（? や # のあとを取りのぞいたもの） */
 const formUrl = (u: URL) => `https://${FORM_HOST}${u.pathname}`;
 
@@ -95,7 +101,7 @@ export function readClassLink(hash: string): FormTemplate | null {
 /** 保存した設定などが正しい形か確かめる */
 export function validateTemplate(raw: unknown): FormTemplate | null {
   if (!raw || typeof raw !== 'object') return null;
-  const t = raw as { url?: unknown; entries?: unknown };
+  const t = raw as { url?: unknown; entries?: unknown; ranking?: unknown };
   if (typeof t.url !== 'string' || !t.entries || typeof t.entries !== 'object') return null;
   let u: URL;
   try {
@@ -110,5 +116,5 @@ export function validateTemplate(raw: unknown): FormTemplate | null {
     if (typeof e === 'string' && ENTRY_KEY.test(e)) entries[id] = e;
   }
   if (missingRequired(entries).length > 0) return null;
-  return { url: formUrl(u), entries };
+  return isRankingUrl(t.ranking) ? { url: formUrl(u), entries, ranking: t.ranking } : { url: formUrl(u), entries };
 }
