@@ -1,5 +1,5 @@
 import { readClassLink, validateTemplate } from './classForm';
-import { isMine, parseRanking } from './classRanking';
+import { fetchRanking, isMine, parseRanking, RankingSheetError } from './classRanking';
 
 const FORM = { url: 'https://docs.google.com/forms/d/e/X/viewform', entries: { name: 'entry.1', stage: 'entry.2', height: 'entry.3' } };
 
@@ -65,5 +65,15 @@ describe('先生が貼るウェブアプリの URL', () => {
     expect(parseRankingUrl('https://script.google.com/a/macros/example.ed.jp/s/AKfy/exec')).toBe('https://script.google.com/a/macros/example.ed.jp/s/AKfy/exec');
     expect(parseRankingUrl('https://docs.google.com/forms/d/e/X/viewform')).toBeNull();
     expect(parseRankingUrl('https://script.google.com/home/projects/abc/edit')).toBeNull();
+  });
+
+  test('ウェブアプリがスプレッドシートを読めなかったときは、それと分かるエラーにする', async () => {
+    const real = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify({ error: 'ランキングを読めませんでした' }), { status: 200 })) as typeof fetch;
+    try {
+      await expect(fetchRanking('https://script.google.com/macros/s/X/exec')).rejects.toBeInstanceOf(RankingSheetError);
+    } finally {
+      globalThis.fetch = real;
+    }
   });
 });

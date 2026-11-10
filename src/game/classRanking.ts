@@ -44,11 +44,16 @@ export function parseRanking(raw: unknown): Ranking | null {
 export const isMine = (row: RankingRow, name: string, group: string) =>
   name.trim() !== '' && row.name === name.trim().slice(0, 20) && (group.trim() === '' || row.group === group.trim().slice(0, 20));
 
+/** ウェブアプリには届いたが、先生のスプレッドシートを読めなかった（doGet が { error } を返した） */
+export class RankingSheetError extends Error {}
+
 /** ウェブアプリから読む */
 export async function fetchRanking(url: string, signal?: AbortSignal): Promise<Ranking> {
   const res = await fetch(url, { cache: 'no-store', signal });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = parseRanking(await res.json());
+  const raw: unknown = await res.json();
+  if (raw && typeof raw === 'object' && typeof (raw as { error?: unknown }).error === 'string') throw new RankingSheetError((raw as { error: string }).error);
+  const data = parseRanking(raw);
   if (!data) throw new Error('形がちがう');
   return data;
 }

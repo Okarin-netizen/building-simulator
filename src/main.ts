@@ -9,7 +9,7 @@ import { canStartTest, evaluate } from './game/evaluate';
 import { breakAdvice, judgePrediction, describeMember, type Prediction } from './game/predict';
 import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
 import RANKING_FORM_SCRIPT from './teacher/rankingForm.gs?raw';
-import { fetchRanking, isMine } from './game/classRanking';
+import { fetchRanking, isMine, RankingSheetError } from './game/classRanking';
 import { buildSubmitUrl, classLinkFor, parseFormTemplate, parseRankingUrl, readClassLink, validateTemplate, type FormTemplate } from './game/classForm';
 import {
   clearClassForm,
@@ -26,7 +26,7 @@ import {
   saveLastStage,
   saveNotes,
 } from './game/progress';
-import { canvasToBlob, cardFileName, drawReflectionCard, loadCardFonts } from './game/reflectionCard';
+import { ANSWER_MAX, canvasToBlob, cardFileName, drawReflectionCard, loadCardFonts } from './game/reflectionCard';
 import { APP_LICENSE, AUTHOR, CHANGELOG, MIT_TEXT, THIRD_PARTY } from './game/about';
 import { CHAPTER_NAMES, nextStage, stageById, stageFullTitle, stageLabel, STAGES, type Stage } from './game/stages';
 import { drawAimRing, drawDesign, drawLoupe, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
@@ -606,7 +606,7 @@ function openSheet(): void {
   $('sheet-record').textContent = `${stage!.title}　${challengeRecord()}`;
   const qs = $('sheet-questions');
   qs.innerHTML = QUESTIONS.map(
-    (q, i) => `<label class="question">${i + 1}. ${q.text}<textarea rows="3" data-note="${q.id}"></textarea></label>`,
+    (q, i) => `<label class="question">${i + 1}. ${q.text}<textarea rows="3" maxlength="${ANSWER_MAX}" data-note="${q.id}"></textarea></label>`,
   ).join('');
   sheet.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[data-note]').forEach((el) => {
     el.value = notes[el.dataset.note!] ?? '';
@@ -658,7 +658,8 @@ async function makeReflectionFile(): Promise<File | null> {
     $<HTMLInputElement>('note-name').focus();
     return null;
   }
-  const questions = QUESTIONS.map((q) => ({ text: q.text, answer: notes[q.id] ?? '' }));
+  // 前の版で書いた長い答えも、画像にできる長さまでにする
+  const questions = QUESTIONS.map((q) => ({ text: q.text, answer: String(notes[q.id] ?? '').slice(0, ANSWER_MAX) }));
   const empty = questions.filter((q) => !q.answer.trim()).length;
   if (empty > 0 && !confirm(`まだ書いていない問いが ${empty} つあります。このまま保存しますか？`)) return null;
   const now = new Date();
@@ -676,29 +677,45 @@ async function makeReflectionFile(): Promise<File | null> {
   return new File([blob], cardFileName(now), { type: 'image/png' });
 }
 
-$('sheet-save').addEventListener('click', async () => {
-  const file = await makeReflectionFile();
-  if (!file) return;
-  const url = URL.createObjectURL(file);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = file.name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
-  showSheetMsg(`「${file.name}」を保存しました（「ダウンロード」フォルダ）。この画像を提出しよう。`, true);
-});
-$('sheet-share').addEventListener('click', async () => {
-  const file = await makeReflectionFile();
-  if (!file) return;
+/** 画像づくりの間はボタンを押せなくし、うまくいかなかったときは理由を見せる */
+async function withReflectionFile(btn: HTMLButtonElement, use: (file: File) => Promise<void> | void): Promise<void> {
+  if (btn.disabled) return;
+  btn.disabled = true;
   try {
-    await navigator.share({ files: [file], title: '最高タワー工房 ふりかえり' });
-  } catch (e) {
-    // 共有の画面を閉じただけのときは何もしない
-    if ((e as Error)?.name !== 'AbortError') showSheetMsg('共有できませんでした。「画像で保存する」で保存して提出しよう。');
+    const file = await makeReflectionFile();
+    if (file) await use(file);
+  } catch {
+    showSheetMsg('画像を作れませんでした。答えを短くするか、ページを開き直してもう一度ためしてください。');
+  } finally {
+    btn.disabled = false;
   }
-});
+}
+
+const sheetSave = $<HTMLButtonElement>('sheet-save');
+sheetSave.addEventListener('click', () =>
+  withReflectionFile(sheetSave, (file) => {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = file.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    showSheetMsg(`「${file.name}」を保存しました（「ダウンロード」フォルダ）。この画像を提出しよう。`, true);
+  }),
+);
+const sheetShare = $<HTMLButtonElement>('sheet-share');
+sheetShare.addEventListener('click', () =>
+  withReflectionFile(sheetShare, async (file) => {
+    try {
+      await navigator.share({ files: [file], title: '最高タワー工房 ふりかえり' });
+    } catch (e) {
+      // 共有の画面を閉じただけのときは何もしない
+      if ((e as Error)?.name !== 'AbortError') showSheetMsg('共有できませんでした。「画像で保存する」で保存して提出しよう。');
+    }
+  }),
+);
 $('open-sheet').addEventListener('click', openSheet);
 $('sheet-close').addEventListener('click', () => (sheet.hidden = true));
 $('sheet-clear').addEventListener('click', () => {
@@ -778,10 +795,13 @@ async function loadRanking(): Promise<void> {
     rankingMsg.textContent = data.rows.length === 0 ? 'まだ記録がありません。結果カードの「クラスに送る」で送ってみよう。' : '';
     const more = data.total > data.rows.length ? `（上位 ${data.rows.length} 人を表示、全部で ${data.total} 人）` : `（${data.total} 人）`;
     $('ranking-updated').textContent = `${data.updated ? `${data.updated.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} 現在` : ''}${more}`;
-  } catch {
+  } catch (e) {
     if (rankingLoad !== ctrl) return;
     rankingMsg.className = 'class-msg ng';
-    rankingMsg.textContent = 'ランキングを読みこめませんでした。インターネットにつながっているか確かめて、「更新する」を押してください。';
+    rankingMsg.textContent =
+      e instanceof RankingSheetError
+        ? 'ランキングを読みこめませんでした。先生に知らせてください。（先生へ：ランキングのスプレッドシートが見つからないか、開けません。スクリプトの createRankingForm を実行したアカウントでデプロイしているか確かめてください）'
+        : 'ランキングを読みこめませんでした。インターネットにつながっているか確かめて、「更新する」を押してください。直らないときは先生に知らせてください。（先生へ：ウェブアプリの「アクセスできるユーザー」が「全員」になっているか確かめてください）';
   } finally {
     clearTimeout(timer);
   }
@@ -1068,6 +1088,11 @@ function loadClassLinkFromUrl(): void {
   saveClassForm(t);
   history.replaceState(null, '', location.pathname + location.search);
 }
+// アプリを開いたままクラスリンクを開き直したとき（# のあとだけ変わり、ページは読み直されない）も設定を読む
+window.addEventListener('hashchange', () => {
+  loadClassLinkFromUrl();
+  refreshClassStatus();
+});
 
 // ---------- 入力 ----------
 
