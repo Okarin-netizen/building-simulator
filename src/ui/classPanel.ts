@@ -4,7 +4,7 @@ import RANKING_FORM_SCRIPT from '../teacher/rankingForm.gs?raw';
 import { fetchRanking, isMine, RankingSheetError } from '../game/classRanking';
 import { buildSubmitUrl, classLinkFor, parseFormTemplate, parseTeacherInput, readClassLink, validateTemplate, type FormTemplate } from '../game/classForm';
 import { clearClassForm, loadClassForm, loadNotes, saveClassForm, saveNotes } from '../game/progress';
-import { $, closeOnBackdrop, openTab, showFallbackLink } from './dom';
+import { $, askConfirm, closeOnBackdrop, openTab, showFallbackLink } from './dom';
 
 /** 結果カードの「クラスに送る」で送る記録 */
 export interface LastResult {
@@ -304,8 +304,8 @@ export function setupClassPanel(host: ClassHost): ClassPanel {
       showFallbackLink(classMsg, url);
     }
   });
-  $('class-forget').addEventListener('click', () => {
-    if (!confirm('この端末のクラスランキングの準備を消しますか？（フォームやスプレッドシートは消えません）')) return;
+  $('class-forget').addEventListener('click', async () => {
+    if (!(await askConfirm('この端末のクラスランキングの準備を消しますか？（フォームやスプレッドシートは消えません）', '消す'))) return;
     clearClassForm();
     openClassDialog();
     refreshClassStatus();

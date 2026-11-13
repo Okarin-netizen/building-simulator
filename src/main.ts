@@ -11,7 +11,7 @@ import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/repla
 import { loadDesign, loadLastStage, loadProgress, logAttempt, recordResult, saveDesign, saveLastStage } from './game/progress';
 import { APP_LICENSE, AUTHOR, CHANGELOG, MIT_TEXT, THIRD_PARTY } from './game/about';
 import { CHAPTER_NAMES, nextStage, stageById, stageFullTitle, stageLabel, STAGES, type Stage } from './game/stages';
-import { $, closeOnBackdrop, el } from './ui/dom';
+import { $, askConfirm, closeOnBackdrop, el } from './ui/dom';
 import { setupClassPanel, type LastResult } from './ui/classPanel';
 import { setupReflectionSheet } from './ui/reflectionSheet';
 import { drawAimRing, drawDesign, drawLoupe, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
@@ -234,8 +234,14 @@ function setDesign(d: Design): void {
 $('sample-square').addEventListener('click', () => setDesign(frameDesign({ floors: 3, material })));
 $('sample-braced').addEventListener('click', () => setDesign(frameDesign({ floors: 3, material, braced: true })));
 $('clear').addEventListener('click', () => setDesign(emptyDesign()));
-$('restart').addEventListener('click', () => {
-  if (stage && confirm('最初の状態に戻しますか？ いま作っている建物は消えます。')) setDesign(stage.initial());
+$('restart').addEventListener('click', async () => {
+  if (!stage || phase !== 'build') return;
+  const start = stage.initial();
+  const message =
+    start.members.length > 0
+      ? 'ステージを始めたときの建物に戻しますか？ いま作っている建物は消えます。'
+      : 'このステージは何もない所から始まります。最初に戻すと、置いた部材が全部消えます。戻しますか？';
+  if (await askConfirm(message, '最初に戻す')) setDesign(start);
 });
 $('show-hint').addEventListener('click', () => {
   if (stage) hint.textContent = `ヒント：${stage.hint}`;

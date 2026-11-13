@@ -1538,3 +1538,20 @@ canvas {
 #class-dialog .buttons[hidden] {
   display: none;
 }
+
+/* ---------- 確認の窓（confirm() のかわり） ---------- */
+
+.confirm-dialog {
+  z-index: 30;
+}
+
+.confirm-card {
+  width: min(440px, 100%);
+}
+
+.confirm-text {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.7;
+}

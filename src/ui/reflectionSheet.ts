@@ -2,7 +2,7 @@
 
 import { loadAttempts, loadNotes, loadProgress, saveNotes } from '../game/progress';
 import { ANSWER_MAX, canvasToBlob, cardFileName, drawReflectionCard, loadCardFonts } from '../game/reflectionCard';
-import { $, closeOnBackdrop } from './dom';
+import { $, askConfirm, closeOnBackdrop } from './dom';
 
 /** シートが画面（main.ts）から借りるもの */
 export interface SheetHost {
@@ -111,7 +111,7 @@ export function setupReflectionSheet(host: SheetHost): ReflectionSheet {
     // 前の版で書いた長い答えも、画像にできる長さまでにする
     const questions = QUESTIONS.map((q) => ({ text: q.text, answer: String(notes[q.id] ?? '').slice(0, ANSWER_MAX) }));
     const empty = questions.filter((q) => !q.answer.trim()).length;
-    if (empty > 0 && !confirm(`まだ書いていない問いが ${empty} つあります。このまま保存しますか？`)) return null;
+    if (empty > 0 && !(await askConfirm(`まだ書いていない問いが ${empty} つあります。このまま保存しますか？`, '保存する'))) return null;
     const now = new Date();
     await loadCardFonts(name + (notes.group ?? '') + questions.map((q) => q.text + q.answer).join(''));
     const card = drawReflectionCard({
@@ -168,8 +168,8 @@ export function setupReflectionSheet(host: SheetHost): ReflectionSheet {
   );
   $('open-sheet').addEventListener('click', openSheet);
   $('sheet-close').addEventListener('click', () => (sheet.hidden = true));
-  $('sheet-clear').addEventListener('click', () => {
-    if (!confirm('ふりかえりに書いたことを全部消しますか？（名前は残ります）')) return;
+  $('sheet-clear').addEventListener('click', async () => {
+    if (!(await askConfirm('ふりかえりに書いたことを全部消しますか？（名前は残ります）', '消す'))) return;
     // 名前・組班と、クラスに送るときのニックネームは残す
     const { nickname, name, group } = loadNotes();
     const keep: Record<string, string> = {};

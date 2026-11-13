@@ -37,3 +37,47 @@ export function showFallbackLink(box: HTMLElement, url: string, label = 'フォ�
   box.append(a);
   box.hidden = false;
 }
+
+/**
+ * アプリの中に出す確認の窓。押したほうで true / false を返す。
+ * ブラウザの confirm() は Chromebook の全画面モードで上が切れて読めないので、こちらを使う。
+ */
+export function askConfirm(message: string, okLabel = 'はい'): Promise<boolean> {
+  return new Promise((resolve) => {
+    const back = el('div', undefined, 'menu confirm-dialog');
+    back.setAttribute('role', 'dialog');
+    back.setAttribute('aria-modal', 'true');
+    const card = el('div', undefined, 'menu-card confirm-card');
+    const text = el('p', message, 'confirm-text');
+    const actions = el('div', undefined, 'buttons sheet-actions');
+    const cancel = el('button', 'やめる');
+    const ok = el('button', okLabel, 'primary');
+    cancel.type = ok.type = 'button';
+    actions.append(cancel, ok);
+    card.append(text, actions);
+    back.append(card);
+
+    const done = (answer: boolean) => {
+      window.removeEventListener('keydown', onKey, true);
+      back.remove();
+      resolve(answer);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        done(false);
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.stopPropagation(); // 後ろの画面で部材が消えないように
+      }
+    };
+    cancel.addEventListener('click', () => done(false));
+    ok.addEventListener('click', () => done(true));
+    back.addEventListener('click', (e) => {
+      if (e.target === back) done(false);
+    });
+    window.addEventListener('keydown', onKey, true);
+    document.body.append(back);
+    ok.focus();
+  });
+}
