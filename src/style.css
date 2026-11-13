@@ -1685,3 +1685,24 @@ canvas {
   font-weight: 700;
   line-height: 1.7;
 }
+
+/* クラスランキング：すぐ上の人までの目標と、参考記録 */
+.ranking-next {
+  margin: 6px 0;
+  padding: 6px 12px;
+  background: var(--ink);
+  color: var(--yellow);
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.ranking-next[hidden] {
+  display: none;
+}
+
+.ranking-ref {
+  display: block;
+  font-size: 0.75em;
+  color: var(--quiet);
+  font-weight: 400;
+}

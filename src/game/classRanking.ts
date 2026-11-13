@@ -8,6 +8,9 @@ export interface RankingRow {
   height: number;
   /** その記録の星の数（0〜3）。前の版のスクリプトは返さない */
   stars?: number;
+  /** 星1・2でもっと高く建てた記録（参考。順位には使わない）。ver.0.27 からのスクリプトだけが返す */
+  best?: number;
+  bestStars?: number;
 }
 
 export interface Ranking {
@@ -35,7 +38,16 @@ export function parseRanking(raw: unknown): Ranking | null {
     const name = text(o.name);
     if (rank === null || height === null || !name) continue;
     const stars = num(o.stars);
-    rows.push({ rank, group: text(o.group), name, height, ...(stars === null ? {} : { stars: Math.min(3, Math.round(stars)) }) });
+    const best = num(o.best);
+    const bestStars = num(o.bestStars);
+    rows.push({
+      rank,
+      group: text(o.group),
+      name,
+      height,
+      ...(stars === null ? {} : { stars: Math.min(3, Math.round(stars)) }),
+      ...(best === null || best <= height ? {} : { best, bestStars: Math.min(3, Math.round(bestStars ?? 0)) }),
+    });
   }
   const updated = typeof r.updated === 'string' ? new Date(r.updated) : null;
   return {
@@ -66,3 +78,17 @@ export async function fetchRanking(url: string, signal?: AbortSignal): Promise<R
 
 /** 星の数を ★★☆ の形にする */
 export const starText = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);
+
+/**
+ * 自分のすぐ上の人と、そこまであと何 m か（目の前の目標）。
+ * 自分が1位、または自分の行が見つからないときは null。同じ高さで上にいる人（費用が安い）は「費用を下げれば並ぶ」。
+ */
+export function nextTarget(rows: RankingRow[], name: string, group: string): { row: RankingRow; more: number } | null {
+  const i = rows.findIndex((r) => isMine(r, name, group));
+  if (i <= 0) return null;
+  const me = rows[i];
+  for (let k = i - 1; k >= 0; k--) {
+    if (rows[k].rank < me.rank) return { row: rows[k], more: Math.max(0, rows[k].height - me.height) };
+  }
+  return null;
+}

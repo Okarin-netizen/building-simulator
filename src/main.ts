@@ -473,7 +473,8 @@ function showResult(w: World): void {
   html += `<ul>${ev.checks.map((c, i) => `<li class="${c.ok ? 'ok' : ''}" style="--i:${i}">${escapeHtml(c.label)}</li>`).join('')}</ul>`;
   html += `<div class="answer ${judge.verdict}"><span class="verdict">${VERDICT_LABEL[judge.verdict]}</span><div><strong>予想の答え合わせ</strong><br>${escapeHtml(judge.message)}<br><small>予想：${escapeHtml(judge.predicted)}　／　結果：${escapeHtml(judge.actual)}</small></div></div>`;
   const note = isChallenge ? safetyNote(ev) : null;
-  if (note) html += `<p class="safety-note">${escapeHtml(note)}</p>`;
+  const rankNote = note && classPanel.classForm()?.ranking ? 'クラスランキングは、星3つのままの高さで並びます。' : '';
+  if (note) html += `<p class="safety-note">${escapeHtml(note)}${rankNote ? `<br>${escapeHtml(rankNote)}` : ''}</p>`;
   if (stage && ev.cleared)
     html += `<div class="lesson"><strong>なぜ？</strong><p class="lesson-point">${escapeHtml(stage.point)}</p>${escapeHtml(stage.lesson)}</div>`;
   else if (ev.fell !== 'none') {

@@ -319,8 +319,9 @@
     <div class="menu" id="ranking-dialog" hidden>
       <div class="menu-card ranking-card">
         <h2>クラスランキング</h2>
-        <p class="note">最高タワーチャレンジの記録を、一人ひとりの一番高い記録で並べています。倒れた・くずれた試験は 0 m です。星はその記録のときの数です。</p>
+        <p class="note" id="ranking-rule">最高タワーチャレンジの記録を、星3つ（こわれた所0・揺れも小さい）のままの一番高い記録で並べています。同じ高さなら費用の安い人が上です。星1・2でもっと高く建てた記録は「参考」です。</p>
         <p class="class-msg" id="ranking-msg"></p>
+        <p class="ranking-next" id="ranking-next" hidden></p>
         <div class="ranking-scroll">
           <table class="ranking-table" id="ranking-table" hidden>
             <thead><tr><th>順位</th><th>組・班</th><th>ニックネーム</th><th>高さ</th><th id="ranking-stars-head" hidden>星</th></tr></thead>
