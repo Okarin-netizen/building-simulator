@@ -1,7 +1,7 @@
 // クラスランキングの画面：先生の設定（フォームのリンク・ランキングの URL）、生徒の「クラスに送る」、アプリ内のランキング表示。
 
 import RANKING_FORM_SCRIPT from '../teacher/rankingForm.gs?raw';
-import { fetchRanking, isMine, RankingSheetError } from '../game/classRanking';
+import { fetchRanking, isMine, RankingSheetError, starText } from '../game/classRanking';
 import { buildSubmitUrl, classLinkFor, parseFormTemplate, parseTeacherInput, readClassLink, validateTemplate, type FormTemplate } from '../game/classForm';
 import { clearClassForm, loadClassForm, loadNotes, saveClassForm, saveNotes } from '../game/progress';
 import { $, askConfirm, closeOnBackdrop, openTab, showFallbackLink } from './dom';
@@ -87,6 +87,9 @@ export function setupClassPanel(host: ClassHost): ClassPanel {
       if (rankingLoad !== ctrl) return;
       const notes = loadNotes();
       const body = $('ranking-body');
+      // 前の版のスクリプトは星を返さないので、そのときは星の列を出さない
+      const withStars = data.rows.some((r) => r.stars !== undefined);
+      $('ranking-stars-head').hidden = !withStars;
       body.replaceChildren(
         ...data.rows.map((r) => {
           const tr = document.createElement('tr');
@@ -95,6 +98,13 @@ export function setupClassPanel(host: ClassHost): ClassPanel {
           for (const v of [`${r.rank}`, r.group, r.name, `${r.height} m`]) {
             const td = document.createElement('td');
             td.textContent = v;
+            tr.append(td);
+          }
+          if (withStars) {
+            const td = document.createElement('td');
+            td.className = 'stars';
+            td.textContent = r.stars === undefined ? '' : starText(r.stars);
+            td.setAttribute('aria-label', r.stars === undefined ? '' : `星${r.stars}つ`);
             tr.append(td);
           }
           return tr;
