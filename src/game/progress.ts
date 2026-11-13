@@ -4,6 +4,7 @@
 import type { Design } from '../physics/design';
 import { MATERIALS } from '../physics/materials';
 import type { Verdict } from './predict';
+import type { TrySummary } from './compare';
 
 const PROGRESS_KEY = 'saikou-tower-progress-v1';
 const LAST_STAGE_KEY = 'saikou-tower-last-stage-v1';
@@ -13,6 +14,8 @@ export interface StageRecord {
   stars: number;
   /** 最高タワーの記録（m） */
   bestHeight?: number;
+  /** 最高タワーの、星3つのままの記録（m） */
+  best3?: number;
 }
 
 export type Progress = Record<string, StageRecord>;
@@ -48,6 +51,8 @@ export function recordResult(stageId: string, stars: number, height?: number): P
   const next: StageRecord = { stars: Math.max(cur.stars, stars) };
   const best = stars > 0 && height !== undefined ? Math.max(cur.bestHeight ?? 0, height) : cur.bestHeight;
   if (best !== undefined) next.bestHeight = best;
+  const best3 = stars === 3 && height !== undefined ? Math.max(cur.best3 ?? 0, height) : cur.best3;
+  if (best3 !== undefined) next.best3 = best3;
   progress[stageId] = next;
   write(PROGRESS_KEY, progress);
   return progress;
@@ -158,4 +163,19 @@ export function clearClassForm(): void {
   } catch {
     // 何もしない
   }
+}
+
+// ---------- 前回の試験（結果カードで比べる） ----------
+
+const LAST_TRY_KEY = 'saikou-tower-last-try-v1';
+
+export function loadLastTry(stageId: string): TrySummary | null {
+  const all = read<Record<string, TrySummary>>(LAST_TRY_KEY);
+  const t = all && typeof all === 'object' ? all[stageId] : null;
+  return t && typeof t === 'object' && typeof t.stars === 'number' && typeof t.driftCm === 'number' ? t : null;
+}
+
+export function saveLastTry(stageId: string, t: TrySummary): void {
+  const all = read<Record<string, TrySummary>>(LAST_TRY_KEY);
+  write(LAST_TRY_KEY, { ...(all && typeof all === 'object' && !Array.isArray(all) ? all : {}), [stageId]: t });
 }

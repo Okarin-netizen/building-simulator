@@ -1706,3 +1706,62 @@ canvas {
   color: var(--quiet);
   font-weight: 400;
 }
+
+/* チャレンジの自己ベスト（星3つ） */
+.best-line {
+  margin: 0 0 6px;
+  padding: 4px 10px;
+  background: var(--ink);
+  color: var(--yellow);
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 14px;
+  text-align: center;
+}
+
+.best-line[hidden] {
+  display: none;
+}
+
+/* 結果カード：前回とくらべて */
+.result .compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.result .compare strong {
+  margin-right: 2px;
+}
+
+.result .compare span {
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 2px solid var(--line);
+}
+
+.result .compare span.up {
+  border-color: var(--green);
+  color: var(--green);
+  font-weight: 700;
+}
+
+.result .compare span.down {
+  border-color: #b3261e;
+  color: #b3261e;
+}
+
+/* 「なぜ？」の本文は折りたたむ（ひとことまとめを先に） */
+.result .lesson details summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.result .lesson .help {
+  margin: 6px 0 0;
+  font-weight: 700;
+}

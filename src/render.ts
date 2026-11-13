@@ -289,8 +289,10 @@ export function drawDesign(
   selectedMember: number | null = null,
   /** 置いたばかりの部材（t：0 置いた瞬間 → 1 落ち着いた）。はまった手応えを出す */
   placed: { indices: number[]; t: number } | null = null,
+  guide: BuildGuide = {},
 ): void {
   drawBackground(ctx, v, w, h, 0);
+  if (guide.band) drawBand(ctx, v, w, guide.band.y0, guide.band.y1, guide.band.label);
   drawGridDots(ctx, v);
   drawGoalLine(ctx, v, w, goalHeight);
 
@@ -345,11 +347,51 @@ export function drawDesign(
   if (design.isolated) drawIsolators(ctx, v, design.nodes.filter((n) => n.y <= 0));
   for (const l of design.loads ?? []) drawLoad(ctx, v, design.nodes.filter((n) => n.y === l.y && n.y > 0), loadLabel(l));
 
+  if (guide.ghost) {
+    // お手本の線（点線）：「ここに置いてみよう」
+    const a = toScreen(v, guide.ghost.x1, guide.ghost.y1);
+    const b = toScreen(v, guide.ghost.x2, guide.ghost.y2);
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.setLineDash([10, 8]);
+    ctx.strokeStyle = '#1f1f1f';
+    ctx.lineWidth = memberWidth(v) + 4;
+    strokeLine(ctx, a, b);
+    ctx.strokeStyle = '#f6c343';
+    ctx.lineWidth = memberWidth(v);
+    strokeLine(ctx, a, b);
+    ctx.restore();
+  }
+
   if (pinMember !== null && design.members[pinMember]) {
     const m = design.members[pinMember];
     const p = screenOf(v, midpoint(design.nodes[m.a], design.nodes[m.b]));
     drawPin(ctx, p.sx, p.sy, 'わたしの予想', PREDICT_COLOR);
   }
+}
+
+/** 組み立て中の手助け：見直す階の帯、お手本の線 */
+export interface BuildGuide {
+  band?: { y0: number; y1: number; label: string };
+  ghost?: { x1: number; y1: number; x2: number; y2: number };
+}
+
+/** 見直す階を、うすい黄色の帯で示す */
+function drawBand(ctx: CanvasRenderingContext2D, v: Viewport, w: number, y0: number, y1: number, label: string): void {
+  const top = toScreen(v, 0, y1).sy;
+  const bottom = toScreen(v, 0, y0).sy;
+  ctx.save();
+  ctx.fillStyle = 'rgba(246, 195, 67, 0.35)';
+  ctx.fillRect(0, top, w, bottom - top);
+  ctx.font = 'bold 14px system-ui';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#ffffff';
+  ctx.strokeText(label, w - 12, (top + bottom) / 2);
+  ctx.fillStyle = '#1f1f1f';
+  ctx.fillText(label, w - 12, (top + bottom) / 2);
+  ctx.restore();
 }
 
 export interface WorldMarks {

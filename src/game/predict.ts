@@ -115,7 +115,7 @@ function heavierAbove(design: Design, floor: number): boolean {
 }
 
 /** 最初にこわれた所が何階か（つなぎ目は、その高さを床にする階の下の階） */
-function breakFloor(design: Design, fb: FirstBreak): number {
+export function breakFloor(design: Design, fb: FirstBreak): number {
   if (fb.kind === 'member') {
     const m = design.members[fb.index];
     const a = design.nodes[m.a];
