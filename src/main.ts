@@ -967,7 +967,10 @@ const legend = $<HTMLDivElement>('legend');
 const stageBox = document.querySelector<HTMLDivElement>('.stage')!;
 
 function frame(now: number): void {
-  legend.hidden = phase !== 'test' && phase !== 'replay';
+  // 毎コマ同じ値を書きこむと、そのたびに画面の作り直しが起き、Chromebook でカーソルが点滅して消えることがある。
+  // 変わったときだけ書く
+  const legendHidden = phase !== 'test' && phase !== 'replay';
+  if (legend.hidden !== legendHidden) legend.hidden = legendHidden;
   stageBox.classList.toggle('replaying', phase === 'replay');
   document.body.classList.toggle('predicting', phase === 'predict');
   document.body.classList.toggle('replaying', phase === 'replay');
