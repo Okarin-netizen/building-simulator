@@ -409,6 +409,18 @@ canvas {
   display: none;
 }
 
+/* 試験中の早送り（待ち時間を半分にする） */
+.panel-go button.fast {
+  flex: 1 1 100%;
+  min-height: 40px;
+  font-size: 15px;
+}
+
+.panel-go button.fast.active {
+  background: var(--ink);
+  color: var(--yellow);
+}
+
 .hint {
   position: absolute;
   left: 52px;
@@ -597,6 +609,113 @@ canvas {
 
 .result .answer small {
   color: var(--quiet);
+}
+
+/* ---------- 結果カードのほめる演出（項目を上から順に出し、合格した数だけ星を光らせる） ---------- */
+
+.result {
+  --star-delay: 0.2s;
+}
+
+.result .stars .star {
+  display: inline-block;
+}
+
+.result .stars .star.off {
+  color: var(--line);
+}
+
+.result.reveal li {
+  animation: result-line 0.25s ease-out both;
+  animation-delay: calc(var(--i) * var(--star-delay) + 0.1s);
+}
+
+.result.reveal .stars .star {
+  animation: star-dim 0.01s both;
+}
+
+.result.reveal .stars .star.on {
+  animation: star-pop 0.35s cubic-bezier(0.3, 1.8, 0.5, 1) both;
+  animation-delay: calc((var(--i) + 1) * var(--star-delay));
+}
+
+.result .new-record {
+  display: inline-block;
+  margin: 8px 0 0;
+  padding: 2px 12px;
+  background: var(--ink);
+  color: var(--yellow);
+  font-family: var(--display);
+  font-size: 18px;
+  border-radius: 999px;
+  animation: star-pop 0.4s cubic-bezier(0.3, 1.8, 0.5, 1) 0.5s both;
+}
+
+@keyframes result-line {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes star-dim {
+  to {
+    color: var(--line);
+  }
+}
+
+@keyframes star-pop {
+  0% {
+    transform: scale(0.2) rotate(-30deg);
+    opacity: 0;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.result .confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+.result .confetti span {
+  position: absolute;
+  top: -12px;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  animation: confetti-fall 1.6s ease-in both;
+}
+
+@keyframes confetti-fall {
+  from {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(260px) rotate(var(--turn));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result.reveal li,
+  .result.reveal .stars .star,
+  .result .new-record {
+    animation: none;
+  }
+  .result .confetti {
+    display: none;
+  }
 }
 
 .verdict {

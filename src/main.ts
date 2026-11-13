@@ -14,7 +14,8 @@ import { CHAPTER_NAMES, nextStage, stageById, stageFullTitle, stageLabel, STAGES
 import { $, askConfirm, closeOnBackdrop, el } from './ui/dom';
 import { setupClassPanel, type LastResult } from './ui/classPanel';
 import { setupReflectionSheet } from './ui/reflectionSheet';
-import { drawAimRing, drawDesign, drawLoupe, drawWorld, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
+import { drawAimRing, drawDesign, drawDust, drawImpact, drawLoupe, drawRumble, drawWorld, firstBreakScreen, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
+import { loadSoundOn, saveSoundOn, setSoundOn, sound } from './ui/sound';
 
 const FREE_ID = 'free';
 
@@ -27,6 +28,8 @@ const resetBtn = $<HTMLButtonElement>('reset');
 const levelSelect = $<HTMLSelectElement>('quake-level');
 const typeSelect = $<HTMLSelectElement>('quake-type');
 const slowCheck = $<HTMLInputElement>('slow');
+const fastBtn = $<HTMLButtonElement>('fast');
+const soundCheck = $<HTMLInputElement>('sound');
 const menu = $<HTMLDivElement>('menu');
 const materialBox = $<HTMLDivElement>('materials');
 const predictBox = $<HTMLDivElement>('predict-box');
@@ -59,6 +62,24 @@ let undoStack: string[] = [];
 const UNDO_LIMIT = 50;
 let cssWidth = 1;
 let cssHeight = 1;
+
+// ---------- 手応えの演出の状態 ----------
+/** 試験を2倍の速さで見る（結果は同じ。待ち時間を半分にする） */
+let fast = false;
+/** この時刻（performance.now）までは計算を止める（こわれた瞬間の「ため」） */
+let freezeUntil = 0;
+/** こわれた瞬間の印 */
+let breakFx: { at: number; label: string; color: string } | null = null;
+/** 倒れた瞬間（揺れと土ぼこり） */
+let collapseFx: number | null = null;
+/** 置いたばかりの部材（白く光らせる） */
+let placedFx: { indices: number[]; at: number } | null = null;
+/** こわれた瞬間に止める時間（ミリ秒） */
+const BREAK_FREEZE_MS = 300;
+const BREAK_FX_MS = 1000;
+const COLLAPSE_FX_MS = 900;
+const PLACED_FX_MS = 220;
+const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
 let dragStart: { x: number; y: number } | null = null;
 let dragEnd: { x: number; y: number } | null = null;
@@ -259,6 +280,22 @@ $('toggle-iso').addEventListener('click', () => {
     : '免震ゴムを外しました。';
 });
 startBtn.addEventListener('click', startPredict);
+function refreshFast(): void {
+  fastBtn.textContent = fast ? '早送り中（ふつうにもどす）' : '早送り ×2';
+  fastBtn.classList.toggle('active', fast);
+}
+fastBtn.addEventListener('click', () => {
+  fast = !fast;
+  refreshFast();
+});
+refreshFast();
+soundCheck.checked = loadSoundOn();
+setSoundOn(soundCheck.checked);
+soundCheck.addEventListener('change', () => {
+  setSoundOn(soundCheck.checked);
+  saveSoundOn(soundCheck.checked);
+  if (soundCheck.checked) sound.place();
+});
 $('undo').addEventListener('click', undo);
 resetBtn.addEventListener('click', backToBuild);
 
@@ -281,6 +318,7 @@ function refreshPanel(): void {
   // 試験の前は「地震スタート！」、試験のあとは「組み立てにもどる」だけを出す
   startBtn.hidden = running;
   resetBtn.hidden = !running;
+  fastBtn.hidden = phase !== 'test';
   resetBtn.disabled = !running;
   // 試験中は開けないので、押せないことが見て分かるようにする
   for (const id of ['open-menu', 'open-sheet', 'open-howto']) $<HTMLButtonElement>(id).disabled = phase === 'test';
@@ -350,6 +388,9 @@ function startQuake(): void {
   world = createWorld(design, wind ? null : quake, wind);
   frames = [captureFrame(world, 0)];
   simLag = 0;
+  freezeUntil = 0;
+  breakFx = null;
+  collapseFx = null;
   phase = 'test';
   predictBox.hidden = true;
   resultBox.hidden = true;
@@ -386,6 +427,8 @@ function showResult(w: World): void {
   const judge = judgePrediction(design, prediction ?? { kind: 'none' }, w.firstBreak);
   const isChallenge = stage?.chapter === 'challenge';
   const cost = designCost(design);
+  const prevBest = stage ? loadProgress()[stage.id]?.bestHeight ?? 0 : 0;
+  const newRecord = isChallenge && ev.cleared && ev.stars > 0 && ev.height > prevBest;
   if (stage) recordResult(stage.id, ev.stars, isChallenge && ev.cleared ? ev.height : undefined);
   logAttempt({
     at: new Date().toISOString(),
@@ -423,8 +466,11 @@ function showResult(w: World): void {
         ? '一部がくずれた…'
         : `高さが足りません（目標 ${goalHeight()} m）`;
 
-  let html = `<div class="result-head"><h3>${title}</h3>${stage ? `<span class="stars">${starText(ev.stars)}</span>` : ''}</div>`;
-  html += `<ul>${ev.checks.map((c) => `<li class="${c.ok ? 'ok' : ''}">${escapeHtml(c.label)}</li>`).join('')}</ul>`;
+  // 3つの項目を上から順に出し、合格した項目ごとに星を1つずつ光らせる（ほめる演出）
+  const starSpans = [0, 1, 2].map((i) => `<span class="star ${i < ev.stars ? 'on' : 'off'}" style="--i:${i}">★</span>`).join('');
+  let html = `<div class="result-head"><h3>${title}</h3>${stage ? `<span class="stars">${starSpans}</span>` : ''}</div>`;
+  if (newRecord) html += `<p class="new-record">新記録！（これまで ${prevBest > 0 ? `${prevBest} m` : 'なし'}）</p>`;
+  html += `<ul>${ev.checks.map((c, i) => `<li class="${c.ok ? 'ok' : ''}" style="--i:${i}">${escapeHtml(c.label)}</li>`).join('')}</ul>`;
   html += `<div class="answer ${judge.verdict}"><span class="verdict">${VERDICT_LABEL[judge.verdict]}</span><div><strong>予想の答え合わせ</strong><br>${escapeHtml(judge.message)}<br><small>予想：${escapeHtml(judge.predicted)}　／　結果：${escapeHtml(judge.actual)}</small></div></div>`;
   const note = isChallenge ? safetyNote(ev) : null;
   if (note) html += `<p class="safety-note">${escapeHtml(note)}</p>`;
@@ -447,8 +493,10 @@ function showResult(w: World): void {
   html += `</div>`;
 
   resultBox.innerHTML = html;
-  resultBox.className = `result ${ev.cleared ? 'ok' : 'fail'}`;
+  resultBox.className = `result reveal ${ev.cleared ? 'ok' : 'fail'}`;
+  if (stage && ev.stars === 3) resultBox.append(confetti());
   resultBox.hidden = false;
+  if (stage) for (let i = 0; i < ev.stars; i++) setTimeout(() => sound.star(i), STAR_DELAY_MS * (i + 1));
   placeResultBox(w);
   resultBox.querySelector('[data-act=replay]')?.addEventListener('click', startReplay);
   resultBox.querySelector('[data-act=send]')?.addEventListener('click', classPanel.openSend);
@@ -461,6 +509,25 @@ function showResult(w: World): void {
     ? '「スロー再生で見る」で、こわれた瞬間をもう一度見られます。'
     : '「スロー再生で見る」で、揺れ方をもう一度見られます。';
   refreshPanel();
+}
+
+/** 星が1つ光るまでの間（ミリ秒）。CSS の --star-delay と同じ */
+const STAR_DELAY_MS = 200;
+
+/** 星3つのときの紙ふぶき（工事現場の黄色と黒）。すぐ消える */
+function confetti(): HTMLElement {
+  const box = el('div', undefined, 'confetti');
+  box.setAttribute('aria-hidden', 'true');
+  for (let i = 0; i < 18; i++) {
+    const piece = el('span');
+    piece.style.left = `${5 + ((i * 53) % 90)}%`;
+    piece.style.animationDelay = `${0.6 + (i % 6) * 0.06}s`;
+    piece.style.background = i % 3 === 0 ? '#1f1f1f' : '#f6c343';
+    piece.style.setProperty('--turn', `${(i % 2 ? 1 : -1) * (180 + i * 20)}deg`);
+    box.append(piece);
+  }
+  setTimeout(() => box.remove(), 2600);
+  return box;
 }
 
 /** 結果カードを、建物に重ならない側（右か左）に置く。どちらにも入らなければ、すき間の広い側 */
@@ -853,7 +920,10 @@ canvas.addEventListener('pointerup', (e) => {
   } else if (dragStart && dragEnd) {
     if (lengthOk(dragStart, dragEnd)) {
       remember();
+      const before = design.members.length;
       addMember(design, dragStart.x, dragStart.y, dragEnd.x, dragEnd.y, material);
+      placedFx = { indices: design.members.map((_, i) => i).filter((i) => i >= before), at: performance.now() };
+      sound.place();
       // 部材が分かれて番号が変わることがあるので、選んでいた部材は選びなおし
       selectMember(null);
       persist();
@@ -980,13 +1050,25 @@ function frame(now: number): void {
   if (world && phase === 'test') {
     // 画面の書きかえの速さ（30回/秒の端末、120回/秒の画面など）によらず、実際の時間どおりに進める。
     // 計算はいつも 1/60 秒ずつ進めるので、スロー再生でもふつうでも結果は同じになる
-    simLag += dt * (slowCheck.checked ? 0.25 : 1);
+    // こわれた瞬間は少しだけ止めて、どこがこわれたかを見せる（計算は止めるだけなので結果は変わらない）
+    if (now < freezeUntil) simLag = 0;
+    else simLag += dt * (slowCheck.checked ? 0.25 : 1) * (fast ? 2 : 1);
     const quakeEnd = SETTLE_TIME + (world.quake?.duration ?? world.wind?.duration ?? 0) + 2;
     while (simLag >= SIM_STEP && phase === 'test') {
       simLag -= SIM_STEP;
+      const hadBreak = !!world.firstBreak;
+      const wasCollapsed = world.collapsed;
       step(world, SIM_STEP);
       frames.push(captureFrame(world, currentShift(world)));
-      if (world.time > quakeEnd || (world.collapsed && world.time > (world.collapseTime ?? 0) + 2.5)) showResult(world);
+      if (!wasCollapsed && world.collapsed) {
+        collapseFx = now;
+        sound.collapse();
+      }
+      if (world.time > quakeEnd || (world.collapsed && world.time > (world.collapseTime ?? 0) + 1.5)) showResult(world);
+      if (!hadBreak && world.firstBreak) {
+        onFirstBreak(world, now);
+        break;
+      }
     }
   }
   if (world && phase === 'replay') {
@@ -1002,18 +1084,30 @@ function frame(now: number): void {
   }
   if (world && phase !== 'build' && phase !== 'predict') {
     const shift = phase === 'replay' ? frames[frameIndexAt(frames, replayTime)].groundShift : currentShift(world);
+    const live = phase === 'test';
+    // 倒れた瞬間・こわれた瞬間は、画面ごと揺らす（大きく始まって、すぐおさまる）
+    let shake = 0;
+    if (live && !reduceMotion()) {
+      if (collapseFx !== null && now - collapseFx < COLLAPSE_FX_MS * 0.6) shake = 7 * (1 - (now - collapseFx) / (COLLAPSE_FX_MS * 0.6));
+      else if (now < freezeUntil) shake = 3;
+    }
+    ctx.save();
+    if (shake > 0) ctx.translate((Math.random() * 2 - 1) * shake, (Math.random() * 2 - 1) * shake * 0.5);
     drawWorld(ctx, viewport, cssWidth, cssHeight, world, shift, goalHeight(), {
       predictMember: prediction?.kind === 'member' ? prediction.index : null,
-      firstBreak: phase === 'test' ? null : world.firstBreak,
+      firstBreak: live ? null : world.firstBreak,
       pulse: (Math.sin(now / 150) + 1) / 2,
     });
-  } else if (buildViewChanged()) {
+    ctx.restore();
+    if (live) drawTestFx(world, now);
+  } else if (buildViewChanged(now)) {
     const preview =
       phase === 'build' && dragStart && dragEnd
         ? { x1: dragStart.x, y1: dragStart.y, x2: dragEnd.x, y2: dragEnd.y, color: MATERIALS[material].color, ok: lengthOk(dragStart, dragEnd) }
         : null;
     const pin = phase === 'predict' && prediction?.kind === 'member' ? prediction.index : null;
-    drawDesign(ctx, viewport, cssWidth, cssHeight, design, preview, hoverMember, goalHeight(), pin, phase === 'build' ? selectedMember : null);
+    const placed = placedFx ? { indices: placedFx.indices, t: (now - placedFx.at) / PLACED_FX_MS } : null;
+    drawDesign(ctx, viewport, cssWidth, cssHeight, design, preview, hoverMember, goalHeight(), pin, phase === 'build' ? selectedMember : null, placed);
     if (aim) {
       // 指の下にかくれた所を、指からはなれたルーペに映す
       const focus = phase === 'build' && tool === 'place' && dragEnd ? dragEnd : aim.world;
@@ -1037,8 +1131,11 @@ let lastBuildView = '';
  * 止まっている間も毎コマ全体を描き直していると、Windows や Chromebook の一部の端末で、
  * マウスを動かしたときにカーソルが消えたり点滅したりする
  */
-function buildViewChanged(): boolean {
+function buildViewChanged(now: number): boolean {
+  // 置いたばかりの部材が光っている間（0.2秒ほど）だけは、毎コマ描き直す
+  if (placedFx && now - placedFx.at > PLACED_FX_MS) placedFx = null;
   const key = JSON.stringify([
+    placedFx ? now : null,
     phase, design, dragStart, dragEnd, hoverMember, selectedMember, prediction, aim, material, tool,
     canvas.width, canvas.height, viewMaxY, goalHeight(),
   ]);
@@ -1049,6 +1146,33 @@ function buildViewChanged(): boolean {
 
 // 文字の形（フォント）が読みこまれたら、目盛りの文字などを描き直す
 document.fonts?.ready.then(() => (lastBuildView = ''));
+
+/** 最初に部材がこわれた瞬間：少し止めて、印と一言を出す。予想が当たっていたら、その場で「大当たり！」 */
+function onFirstBreak(w: World, now: number): void {
+  freezeUntil = now + BREAK_FREEZE_MS;
+  const verdict = prediction ? judgePrediction(design, prediction, w.firstBreak).verdict : 'miss';
+  if (verdict === 'hit') {
+    breakFx = { at: now, label: '予想が大当たり！', color: '#d93a2b' };
+    sound.hit();
+  } else {
+    breakFx = { at: now, label: 'バキッ！', color: '#1f1f1f' };
+    sound.crack();
+  }
+}
+
+/** 試験中の演出（地震の前ぶれ・こわれた瞬間・倒れた瞬間）を、建物の上に重ねて描く */
+function drawTestFx(w: World, now: number): void {
+  if (w.quake && w.time > 0.15 && w.time < SETTLE_TIME + 0.4) drawRumble(ctx, cssWidth, (w.time - 0.15) / (SETTLE_TIME + 0.25));
+  if (breakFx && w.firstBreak) {
+    const t = (now - breakFx.at) / BREAK_FX_MS;
+    if (t <= 1) {
+      // 基礎がこわれたときも印が地面にうもれないよう、少し上に出す
+      const p = firstBreakScreen(viewport, w, w.firstBreak);
+      drawImpact(ctx, { sx: p.sx, sy: Math.min(p.sy, viewport.groundY - 30) }, t, breakFx.label, breakFx.color);
+    }
+  }
+  if (collapseFx !== null) drawDust(ctx, viewport, w.nodes.filter((n) => n.support).map((n) => n.x), (now - collapseFx) / COLLAPSE_FX_MS);
+}
 
 function currentShift(w: World): number {
   return w.quake ? groundOffset(w.quake, w.time - SETTLE_TIME) : 0;
