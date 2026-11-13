@@ -96,6 +96,8 @@ function openStage(s: Stage | null): void {
   $('request').textContent = s ? s.request : '好きな形・材料で建てて、地震の強さや揺れ方を変えて試してみよう。';
   hint.textContent = '点から点へドラッグして部材を置こう。置いた部材はタップすると、材料を変えたり消したりできます。';
   $('stage-tools').hidden = !s;
+  // 何もない所から始まるステージでは「最初に戻す」＝全部消すなので、そう書く
+  $('restart').textContent = s && s.initial().members.length === 0 ? '全部消す' : '最初に戻す';
   $('samples').hidden = !!s;
   $('quake-choice').hidden = !!s;
   $('quake-fixed').textContent = s
@@ -240,8 +242,8 @@ $('restart').addEventListener('click', async () => {
   const message =
     start.members.length > 0
       ? 'ステージを始めたときの建物に戻しますか？ いま作っている建物は消えます。'
-      : 'このステージは何もない所から始まります。最初に戻すと、置いた部材が全部消えます。戻しますか？';
-  if (await askConfirm(message, '最初に戻す')) setDesign(start);
+      : '置いた部材を全部消しますか？（このステージは何もない所から始まります）';
+  if (await askConfirm(message, start.members.length > 0 ? '最初に戻す' : '全部消す')) setDesign(start);
 });
 $('show-hint').addEventListener('click', () => {
   if (stage) hint.textContent = `ヒント：${stage.hint}`;
@@ -965,7 +967,10 @@ const legend = $<HTMLDivElement>('legend');
 const stageBox = document.querySelector<HTMLDivElement>('.stage')!;
 
 function frame(now: number): void {
-  legend.hidden = phase !== 'test' && phase !== 'replay';
+  // 毎コマ同じ値を書きこむと、そのたびに画面の作り直しが起き、Chromebook でカーソルが点滅して消えることがある。
+  // 変わったときだけ書く
+  const legendHidden = phase !== 'test' && phase !== 'replay';
+  if (legend.hidden !== legendHidden) legend.hidden = legendHidden;
   stageBox.classList.toggle('replaying', phase === 'replay');
   document.body.classList.toggle('predicting', phase === 'predict');
   document.body.classList.toggle('replaying', phase === 'replay');
