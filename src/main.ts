@@ -952,6 +952,7 @@ function resize(): void {
   canvas.height = Math.round(rect.height * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   viewport = makeViewport(cssWidth, cssHeight, viewMaxY);
+  lastBuildView = ''; // 大きさを変えるとキャンバスが消えるので、描き直す
 }
 // ヘッダーの文字数が変わると画面の高さも変わるので、キャンバスの大きさの変化を見張る
 new ResizeObserver(resize).observe(canvas);
@@ -1006,7 +1007,7 @@ function frame(now: number): void {
       firstBreak: phase === 'test' ? null : world.firstBreak,
       pulse: (Math.sin(now / 150) + 1) / 2,
     });
-  } else {
+  } else if (buildViewChanged()) {
     const preview =
       phase === 'build' && dragStart && dragEnd
         ? { x1: dragStart.x, y1: dragStart.y, x2: dragEnd.x, y2: dragEnd.y, color: MATERIALS[material].color, ok: lengthOk(dragStart, dragEnd) }
@@ -1027,6 +1028,27 @@ function frame(now: number): void {
   stageBox.classList.toggle('aiming', !!aim);
   requestAnimationFrame(frame);
 }
+
+/** 前に描いた時の、作る画面の状態。同じなら描き直さない */
+let lastBuildView = '';
+
+/**
+ * 作る画面（作る・予想）は、何か変わったときだけ描き直す。
+ * 止まっている間も毎コマ全体を描き直していると、Windows や Chromebook の一部の端末で、
+ * マウスを動かしたときにカーソルが消えたり点滅したりする
+ */
+function buildViewChanged(): boolean {
+  const key = JSON.stringify([
+    phase, design, dragStart, dragEnd, hoverMember, selectedMember, prediction, aim, material, tool,
+    canvas.width, canvas.height, viewMaxY, goalHeight(),
+  ]);
+  if (key === lastBuildView) return false;
+  lastBuildView = key;
+  return true;
+}
+
+// 文字の形（フォント）が読みこまれたら、目盛りの文字などを描き直す
+document.fonts?.ready.then(() => (lastBuildView = ''));
 
 function currentShift(w: World): number {
   return w.quake ? groundOffset(w.quake, w.time - SETTLE_TIME) : 0;
