@@ -1,5 +1,5 @@
 import { readClassLink, validateTemplate } from './classForm';
-import { fetchRanking, isMine, parseRanking, RankingSheetError } from './classRanking';
+import { fetchRanking, isMine, parseRanking, RankingSheetError, starText } from './classRanking';
 
 const FORM = { url: 'https://docs.google.com/forms/d/e/X/viewform', entries: { name: 'entry.1', stage: 'entry.2', height: 'entry.3' } };
 
@@ -78,5 +78,26 @@ describe('先生が貼るウェブアプリの URL', () => {
     } finally {
       globalThis.fetch = real;
     }
+  });
+});
+
+describe('ランキングの星', () => {
+  test('星の数を読み、ない・おかしいときは付けない', () => {
+    const r = parseRanking({
+      rows: [
+        { rank: 1, name: 'a', height: 20, stars: 3 },
+        { rank: 2, name: 'b', height: 10, stars: 7 },
+        { rank: 3, name: 'c', height: 5 },
+        { rank: 4, name: 'd', height: 5, stars: 'x' },
+      ],
+      total: 4,
+    });
+    expect(r?.rows.map((x) => x.stars)).toEqual([3, 3, undefined, undefined]);
+    expect(r?.rows[2]).not.toHaveProperty('stars');
+  });
+
+  test('★☆ で表す', () => {
+    expect(starText(0)).toBe('☆☆☆');
+    expect(starText(2)).toBe('★★☆');
   });
 });

@@ -17,7 +17,7 @@
  *   ①の実行ログ（またはスプレッドシートの「先生用メモ」シート）に出る「クラスリンク」を配る。
  *   ランキングは、スプレッドシートの「ランキング」シートを大きな画面に映して使う。
  *
- *   公開されるのは、チャレンジの記録の「順位・組班・ニックネーム・高さ」の上位50件と、記録を送るフォームのリンクだけ。
+ *   公開されるのは、チャレンジの記録の「順位・組班・ニックネーム・高さ・星」の上位50件と、記録を送るフォームのリンクだけ。
  *   授業が終わったら「デプロイを管理」からアーカイブすると、ランキングは見られなくなる。
  *   このスクリプトを新しい版に貼りかえたときは、「デプロイを管理」→ 鉛筆のマーク →「バージョン」を「新バージョン」にして
  *   「デプロイ」を押す（URL は変わらないので、クラスリンクは配り直さなくてよい）。
@@ -252,7 +252,7 @@ function rankingSpreadsheet_() {
 
 /**
  * 回答のシート（1行目は質問の見出し）から、チャレンジの記録を一人ひとりの最高の高さで並べる。
- * 返すのは順位・組班・ニックネーム・高さだけ（時刻や費用などは出さない）。
+ * 返すのは順位・組班・ニックネーム・高さと、その記録の星の数だけ（時刻や費用などは出さない）。同じ高さなら星の多い人を上に並べる。
  */
 function computeRanking_(values, limit) {
   var head = (values[0] || []).map(function (h) {
@@ -275,21 +275,31 @@ function computeRanking_(values, limit) {
     var group = cell(row, 'group').slice(0, 20);
     var height = Number(cell(row, 'height'));
     if (!isFinite(height) || height < 0) height = 0;
+    var stars = Math.round(Number(cell(row, 'stars')));
+    if (!isFinite(stars) || stars < 0) stars = 0;
+    if (stars > 3) stars = 3;
     var key = group + '\u0000' + name;
-    if (!best[key]) best[key] = { group: group, name: name, height: height, tries: 0 };
+    if (!best[key]) best[key] = { group: group, name: name, height: height, stars: stars, tries: 0 };
     best[key].tries++;
-    if (height > best[key].height) best[key].height = height;
+    // 一番高い記録の星（同じ高さなら星の多いほう）
+    var b = best[key];
+    if (height > b.height || (height === b.height && stars > b.stars)) {
+      b.height = height;
+      b.stars = stars;
+    }
   });
   var list = Object.keys(best).map(function (k) {
     return best[k];
   });
   list.sort(function (a, b) {
-    return b.height - a.height || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    return b.height - a.height || b.stars - a.stars || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
   });
   var rows = [];
   for (var i = 0; i < list.length && i < limit; i++) {
     var rank = i > 0 && list[i].height === list[i - 1].height ? rows[i - 1].rank : i + 1;
-    rows.push({ rank: rank, group: list[i].group, name: list[i].name, height: list[i].height });
+    var out = { rank: rank, group: list[i].group, name: list[i].name, height: list[i].height };
+    if (col.stars >= 0) out.stars = list[i].stars;
+    rows.push(out);
   }
   return { rows: rows, total: list.length };
 }
