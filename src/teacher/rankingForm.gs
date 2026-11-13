@@ -251,8 +251,11 @@ function rankingSpreadsheet_() {
 }
 
 /**
- * 回答のシート（1行目は質問の見出し）から、チャレンジの記録を一人ひとりの最高の高さで並べる。
- * 返すのは順位・組班・ニックネーム・高さと、その記録の星の数だけ（時刻や費用などは出さない）。同じ高さなら星の多い人を上に並べる。
+ * 回答のシート（1行目は質問の見出し）から、チャレンジの記録を一人ひとり並べる。
+ * 本物の建物は「ぎりぎり」では建てないので、順位は「星3つのままの最高の高さ」で決める。同じ高さなら費用の安い人が上。
+ * 星1・2でもっと高く建てた記録は「参考」（best・bestStars）として横に出す。
+ * 返すのは順位・組班・ニックネーム・高さ・星（と参考）だけ（時刻や費用などは出さない）。
+ * 星の列がない古いフォームでは、これまでどおり一番高い記録で並べる。
  */
 function computeRanking_(values, limit) {
   var head = (values[0] || []).map(function (h) {
@@ -263,6 +266,7 @@ function computeRanking_(values, limit) {
     col[q.id] = head.indexOf(q.title);
   });
   if (col.name < 0 || col.stage < 0 || col.height < 0) return { rows: [], total: 0 };
+  var withStars = col.stars >= 0;
   var cell = function (row, id) {
     return col[id] < 0 ? '' : String(row[col[id]] == null ? '' : row[col[id]]).trim();
   };
@@ -278,44 +282,65 @@ function computeRanking_(values, limit) {
     var stars = Math.round(Number(cell(row, 'stars')));
     if (!isFinite(stars) || stars < 0) stars = 0;
     if (stars > 3) stars = 3;
+    var cost = Number(cell(row, 'cost'));
+    if (cell(row, 'cost') === '' || !isFinite(cost) || cost < 0) cost = Infinity;
     var key = group + '\u0000' + name;
-    if (!best[key]) best[key] = { group: group, name: name, height: height, stars: stars, tries: 0 };
-    best[key].tries++;
-    // 一番高い記録の星（同じ高さなら星の多いほう）
+    if (!best[key]) best[key] = { group: group, name: name, height: 0, cost: Infinity, has3: false, top: -1, topStars: 0 };
     var b = best[key];
-    if (height > b.height || (height === b.height && stars > b.stars)) {
-      b.height = height;
-      b.stars = stars;
+    // 参考：星に関係なく一番高い記録（同じ高さなら星の多いほう）
+    if (height > b.top || (height === b.top && stars > b.topStars)) {
+      b.top = height;
+      b.topStars = stars;
+    }
+    // 順位に使う記録：星3つのままの一番高い記録（同じ高さなら安いほう）。星の列がなければ全部の記録
+    if (!withStars || stars === 3) {
+      if (!b.has3 || height > b.height || (height === b.height && cost < b.cost)) {
+        b.height = height;
+        b.cost = cost;
+      }
+      b.has3 = true;
     }
   });
   var list = Object.keys(best).map(function (k) {
     return best[k];
   });
+  var sameRank = function (a, b) {
+    return a.height === b.height && (!withStars || a.cost === b.cost);
+  };
   list.sort(function (a, b) {
-    return b.height - a.height || b.stars - a.stars || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    if (!withStars) return b.height - a.height || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+    var byCost = a.cost === b.cost ? 0 : a.cost < b.cost ? -1 : 1;
+    return b.height - a.height || byCost || b.top - a.top || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
   });
   var rows = [];
   for (var i = 0; i < list.length && i < limit; i++) {
-    var rank = i > 0 && list[i].height === list[i - 1].height ? rows[i - 1].rank : i + 1;
-    var out = { rank: rank, group: list[i].group, name: list[i].name, height: list[i].height };
-    if (col.stars >= 0) out.stars = list[i].stars;
+    var x = list[i];
+    var rank = i > 0 && sameRank(x, list[i - 1]) ? rows[i - 1].rank : i + 1;
+    var out = { rank: rank, group: x.group, name: x.name, height: x.height };
+    if (withStars) {
+      out.stars = x.has3 ? 3 : 0;
+      if (x.top > x.height) {
+        out.best = x.top;
+        out.bestStars = x.topStars;
+      }
+    }
     rows.push(out);
   }
   return { rows: rows, total: list.length };
 }
 
-/** 「ランキング」シート：チャレンジの記録を、一人ひとりの最高の高さで並べる */
+/** 「ランキング」シート：チャレンジの星3つの記録を、一人ひとりの最高の高さで並べる */
 function setUpRankingSheet_(sheet, responsesName) {
   var r = "'" + responsesName.replace(/'/g, "''") + "'!";
   // 回答の列：A タイムスタンプ / B ニックネーム / C 組・班 / D ステージ / E 高さ / F 星 / G 費用 / H 結果
-  sheet.getRange('A1:E1').setValues([['順位', '組・班', 'ニックネーム', '最高の高さ（m）', '送った回数']]);
+  sheet.getRange('A1:E1').setValues([['順位', '組・班', 'ニックネーム', '星3の最高の高さ（m）', '星3の回数']]);
   sheet
     .getRange('B2')
     .setFormula(
       '=ARRAYFORMULA(IFERROR(QUERY({TRIM(TO_TEXT(' + r + 'B2:B)), TRIM(TO_TEXT(' + r + 'C2:C)), TO_TEXT(' + r + 'D2:D), ' +
-        'IFERROR(VALUE(' + r + 'E2:E), 0), TO_TEXT(' + r + 'H2:H)}, ' +
+        'IFERROR(VALUE(' + r + 'E2:E), 0), TO_TEXT(' + r + 'H2:H), IFERROR(VALUE(' + r + 'F2:F), 0)}, ' +
         '"select Col2, Col1, max(Col4), count(Col4) ' +
-        "where Col1 <> '' and Col3 contains '最高タワー' and Col5 <> 'ためし' " +
+        "where Col1 <> '' and Col3 contains '最高タワー' and Col5 <> 'ためし' and Col6 = 3 " +
         "group by Col2, Col1 order by max(Col4) desc label max(Col4) '', count(Col4) ''\", 0), \"\"))"
     );
   // 同じ高さは同じ順位
@@ -331,7 +356,8 @@ function setUpRankingSheet_(sheet, responsesName) {
   sheet.setColumnWidth(4, 160);
   sheet.setColumnWidth(5, 110);
   sheet.getRange('G1').setValue(
-    '最高タワーチャレンジの記録だけを、ニックネーム（と組・班）ごとに一番高い記録で並べます。倒れた・くずれた試験は 0 m で送られます。' +
+    '最高タワーチャレンジの記録のうち、星3つ（こわれた所0・揺れも小さい）の記録だけを、ニックネーム（と組・班）ごとに一番高い記録で並べます。' +
+      'アプリ内のランキングでは、同じ高さなら費用の安い人が上になり、星1・2の記録も「参考」として出ます。倒れた・くずれた試験は 0 m で送られます。' +
       '先生のテスト送信（結果「ためし」）は入りません。元の回答は「' + responsesName + '」シートにあります。'
   );
   sheet.getRange('G1').setWrap(true).setFontColor('#666666');

@@ -1,5 +1,5 @@
 import { readClassLink, validateTemplate } from './classForm';
-import { fetchRanking, isMine, parseRanking, RankingSheetError, starText } from './classRanking';
+import { fetchRanking, isMine, nextTarget, parseRanking, RankingSheetError, starText } from './classRanking';
 
 const FORM = { url: 'https://docs.google.com/forms/d/e/X/viewform', entries: { name: 'entry.1', stage: 'entry.2', height: 'entry.3' } };
 
@@ -99,5 +99,33 @@ describe('ランキングの星', () => {
   test('★☆ で表す', () => {
     expect(starText(0)).toBe('☆☆☆');
     expect(starText(2)).toBe('★★☆');
+  });
+
+  test('参考記録（星1・2のもっと高い記録）を読み、順位の高さ以下なら捨てる', () => {
+    const r = parseRanking({
+      rows: [
+        { rank: 1, name: 'あ', height: 21, stars: 3, best: 27, bestStars: 1 },
+        { rank: 2, name: 'い', height: 18, stars: 3, best: 18, bestStars: 3 },
+        { rank: 3, name: 'う', height: 0, stars: 0, best: 'x' },
+      ],
+    });
+    expect(r?.rows).toEqual([
+      { rank: 1, group: '', name: 'あ', height: 21, stars: 3, best: 27, bestStars: 1 },
+      { rank: 2, group: '', name: 'い', height: 18, stars: 3 },
+      { rank: 3, group: '', name: 'う', height: 0, stars: 0 },
+    ]);
+  });
+
+  test('すぐ上の人まで、あと何 m か', () => {
+    const rows = [
+      { rank: 1, group: '', name: 'あ', height: 24 },
+      { rank: 2, group: '', name: 'い', height: 21 },
+      { rank: 2, group: '', name: 'う', height: 21 },
+      { rank: 4, group: '', name: 'え', height: 21 },
+    ];
+    expect(nextTarget(rows, 'う', '')).toEqual({ row: rows[0], more: 3 });
+    expect(nextTarget(rows, 'え', '')).toEqual({ row: rows[2], more: 0 });
+    expect(nextTarget(rows, 'あ', '')).toBeNull();
+    expect(nextTarget(rows, 'お', '')).toBeNull();
   });
 });

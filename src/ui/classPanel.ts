@@ -1,10 +1,10 @@
 // クラスランキングの画面：先生の設定（フォームのリンク・ランキングの URL）、生徒の「クラスに送る」、アプリ内のランキング表示。
 
 import RANKING_FORM_SCRIPT from '../teacher/rankingForm.gs?raw';
-import { fetchRanking, isMine, RankingSheetError, starText } from '../game/classRanking';
+import { fetchRanking, isMine, nextTarget, RankingSheetError, starText } from '../game/classRanking';
 import { buildSubmitUrl, classLinkFor, parseFormTemplate, parseTeacherInput, readClassLink, validateTemplate, type FormTemplate } from '../game/classForm';
 import { clearClassForm, loadClassForm, loadNotes, saveClassForm, saveNotes } from '../game/progress';
-import { $, askConfirm, closeOnBackdrop, openTab, showFallbackLink } from './dom';
+import { $, askConfirm, closeOnBackdrop, el, openTab, showFallbackLink } from './dom';
 
 /** 結果カードの「クラスに送る」で送る記録 */
 export interface LastResult {
@@ -100,6 +100,8 @@ export function setupClassPanel(host: ClassHost): ClassPanel {
             td.textContent = v;
             tr.append(td);
           }
+          // 星1・2でもっと高く建てた記録は、順位に使わず「参考」として小さく出す
+          if (r.best !== undefined) tr.lastElementChild!.append(el('small', `（参考 ${r.best} m・星${r.bestStars ?? 0}）`, 'ranking-ref'));
           if (withStars) {
             const td = document.createElement('td');
             td.className = 'stars';
@@ -111,6 +113,19 @@ export function setupClassPanel(host: ClassHost): ClassPanel {
         }),
       );
       rankingTable.hidden = data.rows.length === 0;
+      // 前の版のスクリプト（星を返さない）は、高さだけで並べている
+      $('ranking-rule').textContent = withStars
+        ? '最高タワーチャレンジの記録を、星3つ（こわれた所0・揺れも小さい）のままの一番高い記録で並べています。同じ高さなら費用の安い人が上です。星1・2でもっと高く建てた記録は「参考」です。'
+        : '最高タワーチャレンジの記録を、一人ひとりの一番高い記録で並べています。倒れた・くずれた試験は 0 m です。';
+      // 自分のすぐ上の人までの目標
+      const next = nextTarget(data.rows, notes.nickname ?? '', notes.group ?? '');
+      const nextBox = $('ranking-next');
+      nextBox.hidden = !next;
+      if (next)
+        nextBox.textContent =
+          next.more > 0
+            ? `${next.row.rank}位の ${next.row.name} さんまで、あと ${next.more} m！${withStars ? '（星3つのままで）' : ''}`
+            : `${next.row.rank}位の ${next.row.name} さんと同じ高さ。${withStars ? '費用を下げれば並べるかも！' : ''}`;
       rankingMsg.textContent = data.rows.length === 0 ? 'まだ記録がありません。結果カードの「クラスに送る」で送ってみよう。' : '';
       const more = data.total > data.rows.length ? `（上位 ${data.rows.length} 人を表示、全部で ${data.total} 人）` : `（${data.total} 人）`;
       $('ranking-updated').textContent = `${data.updated ? `${data.updated.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })} 現在` : ''}${more}`;

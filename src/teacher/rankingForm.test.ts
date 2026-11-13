@@ -181,15 +181,29 @@ describe('先生用スクリプト：アプリ内ランキング', () => {
     expect(Object.keys(r.rows[0]).sort()).toEqual(['group', 'height', 'name', 'rank', 'stars']);
   });
 
-  test('星は一番高い記録のものを出し、同じ高さなら星の多い人を上にする', () => {
+  test('順位は星3つのままの最高の高さで決め、星1・2のもっと高い記録は参考として出す', () => {
     const { computeRanking_ } = load() as any;
-    const r2 = (name: string, height: number, stars: unknown) => [new Date(), name, '', CH, height, stars, 100, 'クリア'];
+    const r2 = (name: string, height: number, stars: unknown, cost: unknown = 100) => [new Date(), name, '', CH, height, stars, cost, 'クリア'];
     const r = computeRanking_([HEAD, r2('あ', 20, 1), r2('あ', 15, 3), r2('い', 20, 2), r2('い', 20, 3), r2('う', 20, 'x')], 50);
     expect(r.rows).toEqual([
       { rank: 1, group: '', name: 'い', height: 20, stars: 3 },
-      { rank: 1, group: '', name: 'あ', height: 20, stars: 1 },
-      { rank: 1, group: '', name: 'う', height: 20, stars: 0 },
+      { rank: 2, group: '', name: 'あ', height: 15, stars: 3, best: 20, bestStars: 1 },
+      { rank: 3, group: '', name: 'う', height: 0, stars: 0, best: 20, bestStars: 0 },
     ]);
+  });
+
+  test('星3つで同じ高さなら、費用の安い人が上（費用も同じなら同じ順位）', () => {
+    const { computeRanking_ } = load() as any;
+    const r2 = (name: string, height: number, cost: unknown) => [new Date(), name, '', CH, height, 3, cost, 'クリア'];
+    const r = computeRanking_([HEAD, r2('高い', 24, 280), r2('安い', 24, 230), r2('安い', 24, 250), r2('同じ', 24, 230), r2('ひくい', 21, 100)], 50);
+    expect(r.rows.map((x: { name: string; rank: number }) => [x.rank, x.name])).toEqual([
+      [1, '同じ'],
+      [1, '安い'],
+      [3, '高い'],
+      [4, 'ひくい'],
+    ]);
+    // 費用は返さない
+    expect(Object.keys(r.rows[0]).sort()).toEqual(['group', 'height', 'name', 'rank', 'stars']);
   });
 
   test('件数の上限を守り、列の順番が変わっても見出しで探す', () => {
