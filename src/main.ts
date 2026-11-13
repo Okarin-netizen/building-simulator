@@ -6,15 +6,17 @@ import { groundOffset, makeQuake, QUAKE_LEVELS, QUAKE_TYPES, TEST_DURATION, type
 import { createWorld, SETTLE_TIME, step, type World } from './physics/world';
 import { distanceToSegment } from './physics/geometry';
 import { canStartTest, evaluate, safetyNote } from './game/evaluate';
-import { breakAdvice, judgePrediction, describeMember, type Prediction } from './game/predict';
+import { breakAdvice, breakFloor, judgePrediction, describeMember, type Prediction } from './game/predict';
+import { brokenCount } from './physics/world';
+import { compareTries } from './game/compare';
 import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
-import { loadDesign, loadLastStage, loadProgress, logAttempt, recordResult, saveDesign, saveLastStage } from './game/progress';
+import { loadDesign, loadLastStage, loadLastTry, loadProgress, logAttempt, recordResult, saveDesign, saveLastStage, saveLastTry } from './game/progress';
 import { APP_LICENSE, AUTHOR, CHANGELOG, MIT_TEXT, THIRD_PARTY } from './game/about';
 import { CHAPTER_NAMES, nextStage, stageById, stageFullTitle, stageLabel, STAGES, type Stage } from './game/stages';
 import { $, askConfirm, closeOnBackdrop, el } from './ui/dom';
 import { setupClassPanel, type LastResult } from './ui/classPanel';
 import { setupReflectionSheet } from './ui/reflectionSheet';
-import { drawAimRing, drawDesign, drawDust, drawImpact, drawLoupe, drawRumble, drawWorld, firstBreakScreen, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
+import { type BuildGuide, drawAimRing, drawDesign, drawDust, drawImpact, drawLoupe, drawRumble, drawWorld, firstBreakScreen, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
 import { loadSoundOn, saveSoundOn, setSoundOn, sound } from './ui/sound';
 
 const FREE_ID = 'free';
@@ -74,6 +76,16 @@ let breakFx: { at: number; label: string; color: string } | null = null;
 let collapseFx: number | null = null;
 /** 置いたばかりの部材（白く光らせる） */
 let placedFx: { indices: number[]; at: number } | null = null;
+// ---------- 詰まったときの手助け ----------
+/** ステージごとの、続けて倒れた回数（この画面を開いている間だけ数える） */
+const failStreak = new Map<string, number>();
+/** 続けてこの回数倒れたら、見直す階を帯で示す */
+const HELP_AFTER_FAILS = 3;
+/** 組み立て中に出す手助け（見直す階の帯・お手本の線）。次の試験を始めたら消す */
+let guide: BuildGuide = {};
+/** はじめて開いた人（1-1 で「まず押してみよう」から始める） */
+let firstVisit = false;
+
 /** こわれた瞬間に止める時間（ミリ秒） */
 const BREAK_FREEZE_MS = 300;
 const BREAK_FX_MS = 1000;
@@ -115,7 +127,11 @@ function openStage(s: Stage | null): void {
   if (!s?.load && tool === 'load') tool = 'place';
   $('stage-name').textContent = s ? s.title : '自由に作る';
   $('request').textContent = s ? s.request : '好きな形・材料で建てて、地震の強さや揺れ方を変えて試してみよう。';
-  hint.textContent = '点から点へドラッグして部材を置こう。置いた部材はタップすると、材料を変えたり消したりできます。';
+  guide = {};
+  hint.textContent =
+    firstVisit && s?.id === '1-1'
+      ? 'まずはこのまま「地震スタート！」を押して、この建物がどうなるか見てみよう。'
+      : '点から点へドラッグして部材を置こう。置いた部材はタップすると、材料を変えたり消したりできます。';
   $('stage-tools').hidden = !s;
   // 何もない所から始まるステージでは「最初に戻す」＝全部消すなので、そう書く
   $('restart').textContent = s && s.initial().members.length === 0 ? '全部消す' : '最初に戻す';
@@ -332,6 +348,15 @@ function refreshPanel(): void {
   $('stat-cost').textContent = String(cost);
   $('stat-budget').textContent = stage ? ` / ${stage.budget}万円` : ' 万円';
   $('cost-line').classList.toggle('over', !!stage && cost > stage.budget);
+  // チャレンジでは、星3つのままの自己ベストをいつも見せる（目の前の目標）
+  const bestLine = $('best-line');
+  const isChallenge = stage?.chapter === 'challenge';
+  if (bestLine.hidden !== !isChallenge) bestLine.hidden = !isChallenge;
+  if (isChallenge) {
+    const best3 = loadProgress()[stage!.id]?.best3;
+    const text = best3 ? `自己ベスト（星3つ）：${best3} m` : '自己ベスト（星3つ）：まだなし';
+    if (bestLine.textContent !== text) bestLine.textContent = text;
+  }
 }
 
 // ---------- 予想 ----------
@@ -391,6 +416,7 @@ function startQuake(): void {
   freezeUntil = 0;
   breakFx = null;
   collapseFx = null;
+  guide = {};
   phase = 'test';
   predictBox.hidden = true;
   resultBox.hidden = true;
@@ -414,7 +440,11 @@ function resetTest(): void {
 
 function backToBuild(): void {
   resetTest();
-  hint.textContent = 'どこを直せば強くなるか考えて、作り直してみよう。';
+  hint.textContent = guide.ghost
+    ? '黄色の点線のように、四角の角から角へ、点から点へドラッグしてななめの部材を置いてみよう。'
+    : guide.band
+      ? '黄色の帯の階が、最初にこわれた所です。三角形が足りているか、材料が合っているか見直そう。'
+      : 'どこを直せば強くなるか考えて、作り直してみよう。';
   refreshPanel();
 }
 
@@ -471,16 +501,31 @@ function showResult(w: World): void {
   let html = `<div class="result-head"><h3>${title}</h3>${stage ? `<span class="stars">${starSpans}</span>` : ''}</div>`;
   if (newRecord) html += `<p class="new-record">新記録！（これまで ${prevBest > 0 ? `${prevBest} m` : 'なし'}）</p>`;
   html += `<ul>${ev.checks.map((c, i) => `<li class="${c.ok ? 'ok' : ''}" style="--i:${i}">${escapeHtml(c.label)}</li>`).join('')}</ul>`;
+  // 前回とくらべる（星が増えない小さな改良も「よくなった」と分かるように）
+  const broken = brokenCount(w);
+  const summary = { stars: ev.stars, fell: ev.fell, driftCm: Math.round(w.maxDrift * 100), broken: broken.members + broken.joints, cost, height: ev.height };
+  const diffs = compareTries(loadLastTry(designId()), summary);
+  saveLastTry(designId(), summary);
+  if (diffs.length > 0)
+    html += `<p class="compare"><strong>前回とくらべて</strong>${diffs.map((d) => `<span class="${d.better === true ? 'up' : d.better === false ? 'down' : ''}">${escapeHtml(d.text)}</span>`).join('')}</p>`;
   html += `<div class="answer ${judge.verdict}"><span class="verdict">${VERDICT_LABEL[judge.verdict]}</span><div><strong>予想の答え合わせ</strong><br>${escapeHtml(judge.message)}<br><small>予想：${escapeHtml(judge.predicted)}　／　結果：${escapeHtml(judge.actual)}</small></div></div>`;
   const note = isChallenge ? safetyNote(ev) : null;
   const rankNote = note && classPanel.classForm()?.ranking ? 'クラスランキングは、星3つのままの高さで並びます。' : '';
   if (note) html += `<p class="safety-note">${escapeHtml(note)}${rankNote ? `<br>${escapeHtml(rankNote)}` : ''}</p>`;
+  const fails = ev.fell !== 'none' ? (failStreak.get(designId()) ?? 0) + 1 : 0;
+  failStreak.set(designId(), fails);
   if (stage && ev.cleared)
-    html += `<div class="lesson"><strong>なぜ？</strong><p class="lesson-point">${escapeHtml(stage.point)}</p>${escapeHtml(stage.lesson)}</div>`;
+    html += `<div class="lesson"><strong>なぜ？</strong><p class="lesson-point">${escapeHtml(stage.point)}</p><details><summary>くわしく読む</summary>${escapeHtml(stage.lesson)}</details></div>`;
   else if (ev.fell !== 'none') {
     const advice = breakAdvice(design, w.firstBreak);
     const partly = ev.fell === 'partly' ? '建物の一部が折れて、元の高さから落ちました。くずれた所がある建物は「倒れなかった」になりません。' : '';
-    html += `<div class="lesson"><strong>見直そう</strong>${partly}スロー再生で、最初にこわれた所（黄色の輪）を確かめよう。${advice ? escapeHtml(advice) : stage ? escapeHtml(stage.hint) : ''}</div>`;
+    guide = helpGuide(w, fails);
+    const help = guide.ghost
+      ? '組み立てにもどると、部材を置く場所の例を黄色の点線で示します。点から点へドラッグして置いてみよう。'
+      : guide.band
+        ? `${fails}回続けて倒れたね。組み立てにもどると、最初にこわれた${guide.band.label.replace('ここを見直そう：', '')}を黄色の帯で示します。その階の三角形や材料を見直そう。`
+        : '';
+    html += `<div class="lesson"><strong>見直そう</strong>${partly}スロー再生で、最初にこわれた所（黄色の輪）を確かめよう。${advice ? escapeHtml(advice) : stage ? escapeHtml(stage.hint) : ''}${help ? `<p class="help">${escapeHtml(help)}</p>` : ''}</div>`;
   }
   const canSend = lastResult !== null && classPanel.classForm() !== null;
   const canRank = isChallenge && !!classPanel.classForm()?.ranking;
@@ -510,6 +555,28 @@ function showResult(w: World): void {
     ? '「スロー再生で見る」で、こわれた瞬間をもう一度見られます。'
     : '「スロー再生で見る」で、揺れ方をもう一度見られます。';
   refreshPanel();
+}
+
+/**
+ * 倒れたときの手助け。1-1 をはじめて倒したときは、ななめの部材のお手本（点線）。
+ * 同じステージで続けて何回も倒れたら、最初にこわれた階を帯で示す（答えそのものは見せない）。
+ */
+function helpGuide(w: World, fails: number): BuildGuide {
+  if (stage?.id === '1-1' && fails === 1) {
+    const hasDiagonal = design.members.some((m) => design.nodes[m.a].x !== design.nodes[m.b].x && design.nodes[m.a].y !== design.nodes[m.b].y);
+    const ground = design.nodes.filter((n) => n.y === 0);
+    const first = design.nodes.filter((n) => n.y === 3);
+    if (!hasDiagonal && ground.length >= 2 && first.length >= 2) {
+      const left = ground.reduce((a, b) => (b.x < a.x ? b : a));
+      const right = first.reduce((a, b) => (b.x > a.x ? b : a));
+      return { ghost: { x1: left.x, y1: 0, x2: right.x, y2: 3 } };
+    }
+  }
+  if (fails >= HELP_AFTER_FAILS && w.firstBreak) {
+    const floor = breakFloor(design, w.firstBreak);
+    return { band: { y0: (floor - 1) * 3, y1: floor * 3, label: `ここを見直そう：${floor}階のあたり` } };
+  }
+  return {};
 }
 
 /** 星が1つ光るまでの間（ミリ秒）。CSS の --star-delay と同じ */
@@ -924,6 +991,8 @@ canvas.addEventListener('pointerup', (e) => {
       const before = design.members.length;
       addMember(design, dragStart.x, dragStart.y, dragEnd.x, dragEnd.y, material);
       placedFx = { indices: design.members.map((_, i) => i).filter((i) => i >= before), at: performance.now() };
+      // お手本の点線は、何か置いたら役目を終える
+      if (guide.ghost) guide = { ...guide, ghost: undefined };
       sound.place();
       // 部材が分かれて番号が変わることがあるので、選んでいた部材は選びなおし
       selectMember(null);
@@ -1108,7 +1177,7 @@ function frame(now: number): void {
         : null;
     const pin = phase === 'predict' && prediction?.kind === 'member' ? prediction.index : null;
     const placed = placedFx ? { indices: placedFx.indices, t: (now - placedFx.at) / PLACED_FX_MS } : null;
-    drawDesign(ctx, viewport, cssWidth, cssHeight, design, preview, hoverMember, goalHeight(), pin, phase === 'build' ? selectedMember : null, placed);
+    drawDesign(ctx, viewport, cssWidth, cssHeight, design, preview, hoverMember, goalHeight(), pin, phase === 'build' ? selectedMember : null, placed, phase === 'build' ? guide : {});
     if (aim) {
       // 指の下にかくれた所を、指からはなれたルーペに映す
       const focus = phase === 'build' && tool === 'place' && dragEnd ? dragEnd : aim.world;
@@ -1137,6 +1206,7 @@ function buildViewChanged(now: number): boolean {
   if (placedFx && now - placedFx.at > PLACED_FX_MS) placedFx = null;
   const key = JSON.stringify([
     placedFx ? now : null,
+    guide,
     phase, design, dragStart, dragEnd, hoverMember, selectedMember, prediction, aim, material, tool,
     canvas.width, canvas.height, viewMaxY, goalHeight(),
   ]);
@@ -1183,7 +1253,9 @@ resize();
 classPanel.loadClassLinkFromUrl();
 classPanel.refreshClassStatus();
 const lastId = loadLastStage();
+// はじめて開いた人には説明の窓を出さず、1-1 の「まず押してみよう」から始める（遊び方はボタンでいつでも開ける）
+firstVisit = !lastId;
 if (lastId === FREE_ID) openStage(null);
 else openStage(stageById(lastId ?? '') ?? STAGES[0]);
-if (!lastId) openHowto(true);
+firstVisit = false;
 requestAnimationFrame(frame);
