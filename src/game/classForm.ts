@@ -125,3 +125,37 @@ export function validateTemplate(raw: unknown): FormTemplate | null {
   if (missingRequired(entries).length > 0) return null;
   return isRankingUrl(t.ranking) ? { url: formUrl(u), entries, ranking: t.ranking } : { url: formUrl(u), entries };
 }
+
+/** 先生が準備画面の欄に貼ったもの */
+export type TeacherInput =
+  | { kind: 'ranking'; url: string }
+  | { kind: 'template'; template: FormTemplate; unused: FieldId[] }
+  | { kind: 'error'; reason: string };
+
+/**
+ * 準備画面の欄は1つだけにして、何を貼っても受けつける：
+ * ウェブアプリの URL（https://script.google.com/…/exec）、実行ログのクラスリンク、フォームの事前入力リンク。
+ */
+export function parseTeacherInput(input: string): TeacherInput {
+  const s = input.trim();
+  if (/^https:\/\/script\.google\.com\//.test(s)) {
+    const url = parseRankingUrl(s);
+    if (url) return { kind: 'ranking', url };
+    return {
+      kind: 'error',
+      reason: 'ウェブアプリの URL ではないようです。「デプロイ」のあとに出る、/exec で終わる URL を貼ってください（スクリプトの編集画面の URL ではありません）。',
+    };
+  }
+  if (s.includes('#class=')) {
+    const t = readClassLink(s.slice(s.indexOf('#')));
+    if (t) return { kind: 'template', template: t, unused: FIELD_IDS.filter((f) => !t.entries[f]) };
+    return { kind: 'error', reason: 'クラスリンクを読み取れませんでした。途中で切れていないか確かめて、もう一度まるごと貼ってください。' };
+  }
+  const r = parseFormTemplate(s);
+  if (r.ok) return { kind: 'template', template: r.template, unused: r.unused };
+  if (/^https:\/\/docs\.google\.com\/forms\//.test(s)) return { kind: 'error', reason: r.reason };
+  return {
+    kind: 'error',
+    reason: '読み取れませんでした。②で出た「ウェブアプリの URL」（https://script.google.com/ で始まり /exec で終わる）を貼ってください。',
+  };
+}

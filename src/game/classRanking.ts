@@ -12,6 +12,8 @@ export interface Ranking {
   rows: RankingRow[];
   total: number;
   updated: Date | null;
+  /** 記録を送るフォームの事前入力リンク（新しい版のスクリプトだけが返す。先生の準備画面で使う） */
+  form?: string;
 }
 
 const text = (v: unknown) => (typeof v === 'string' ? v.trim().slice(0, 20) : typeof v === 'number' ? String(v) : '');
@@ -20,7 +22,7 @@ const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >=
 /** ウェブアプリの答え（JSON）を読む。読めないときは null */
 export function parseRanking(raw: unknown): Ranking | null {
   if (!raw || typeof raw !== 'object') return null;
-  const r = raw as { rows?: unknown; total?: unknown; updated?: unknown };
+  const r = raw as { rows?: unknown; total?: unknown; updated?: unknown; form?: unknown };
   if (!Array.isArray(r.rows)) return null;
   const rows: RankingRow[] = [];
   for (const x of r.rows.slice(0, 100)) {
@@ -37,6 +39,7 @@ export function parseRanking(raw: unknown): Ranking | null {
     rows,
     total: num(r.total) ?? rows.length,
     updated: updated && !Number.isNaN(updated.getTime()) ? updated : null,
+    ...(typeof r.form === 'string' ? { form: r.form } : {}),
   };
 }
 

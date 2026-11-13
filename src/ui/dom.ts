@@ -28,9 +28,9 @@ export function openTab(url: string): boolean {
 }
 
 /** 開けなかったときに、押せばフォームが開くリンクを見せる */
-export function showFallbackLink(box: HTMLElement, url: string): void {
-  box.replaceChildren('新しいタブを開けませんでした。ここを押してフォームを開いてください：');
-  const a = el('a', 'フォームを開く');
+export function showFallbackLink(box: HTMLElement, url: string, label = 'フォームを開く'): void {
+  box.replaceChildren('新しいタブを開けませんでした。ここを押して開いてください：');
+  const a = el('a', label);
   a.href = url;
   a.target = '_blank';
   a.rel = 'noopener';

@@ -444,7 +444,7 @@ function showResult(w: World): void {
   placeResultBox(w);
   resultBox.querySelector('[data-act=replay]')?.addEventListener('click', startReplay);
   resultBox.querySelector('[data-act=send]')?.addEventListener('click', classPanel.openSend);
-  resultBox.querySelector('[data-act=ranking]')?.addEventListener('click', classPanel.openRanking);
+  resultBox.querySelector('[data-act=ranking]')?.addEventListener('click', () => classPanel.openRanking());
   resultBox.querySelector('[data-act=sheet]')?.addEventListener('click', sheet.open);
   resultBox.querySelector('[data-act=rebuild]')?.addEventListener('click', backToBuild);
   resultBox.querySelector('[data-act=next]')?.addEventListener('click', () => next && openStage(next));

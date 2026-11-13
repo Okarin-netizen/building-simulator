@@ -283,4 +283,31 @@ describe('先生用スクリプト：前の版で作ったフォームでもラ�
     expect(JSON.parse(body).error).toBeTruthy();
     expect(Object.keys(store)).toEqual([]);
   });
+
+  test('記録を送るフォームのリンクも返す。前の版で作ったフォームは、質問の名前から作って覚える', () => {
+    const props: Record<string, string> = { SHEET_ID: 'ID' };
+    let body = '';
+    const out: any = { setMimeType: () => out };
+    const sheet = { getFormUrl: () => 'https://docs.google.com/forms/d/FORM/edit', getDataRange: () => ({ getValues: () => [['ニックネーム', 'ステージ', '高さ（m）']] }) };
+    const filled: string[] = [];
+    const item = (title: string) => ({ getTitle: () => title, asTextItem: () => ({ createResponse: (v: string) => v }) });
+    const form = {
+      getItems: () => ['ニックネーム', 'ステージ', '高さ（m）', 'ほかの質問'].map(item),
+      createResponse: () => {
+        const r: any = { withItemResponse: (v: string) => (filled.push(v), r), toPrefilledUrl: () => `https://docs.google.com/forms/d/e/X/viewform?${filled.join('&')}` };
+        return r;
+      },
+    };
+    const { doGet } = load({
+      PropertiesService: { getScriptProperties: () => ({ getProperty: (k: string) => props[k] ?? null, setProperty: (k: string, v: string) => (props[k] = v) }) },
+      SpreadsheetApp: { openById: () => ({ getSheets: () => [sheet] }) },
+      FormApp: { openByUrl: () => form, ItemType: { TEXT: 'TEXT' } },
+      ContentService: { createTextOutput: (t: string) => ((body = t), out), MimeType: { JSON: 'json' } },
+      ...cacheMocks(),
+    }) as any;
+    doGet();
+    expect(filled).toEqual(['NAME', 'STAGE', 'HEIGHT']);
+    expect(JSON.parse(body).form).toBe(props.PREFILLED_URL);
+    expect(props.PREFILLED_URL).toContain('NAME');
+  });
 });

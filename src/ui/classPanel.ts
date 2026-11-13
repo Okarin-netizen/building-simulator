@@ -2,7 +2,7 @@
 
 import RANKING_FORM_SCRIPT from '../teacher/rankingForm.gs?raw';
 import { fetchRanking, isMine, RankingSheetError } from '../game/classRanking';
-import { buildSubmitUrl, classLinkFor, parseFormTemplate, parseRankingUrl, readClassLink, validateTemplate, type FormTemplate } from '../game/classForm';
+import { buildSubmitUrl, classLinkFor, parseFormTemplate, parseTeacherInput, readClassLink, validateTemplate, type FormTemplate } from '../game/classForm';
 import { clearClassForm, loadClassForm, loadNotes, saveClassForm, saveNotes } from '../game/progress';
 import { $, closeOnBackdrop, openTab, showFallbackLink } from './dom';
 
@@ -28,7 +28,7 @@ export interface ClassPanel {
   classForm(): FormTemplate | null;
   refreshClassStatus(): void;
   refreshRankingButtons(): void;
-  openRanking(): void;
+  openRanking(big?: boolean): void;
   openSend(): void;
   loadClassLinkFromUrl(): void;
 }
@@ -36,7 +36,6 @@ export interface ClassPanel {
 export function setupClassPanel(host: ClassHost): ClassPanel {
   const classDialog = $<HTMLDivElement>('class-dialog');
   const sendDialog = $<HTMLDivElement>('send-dialog');
-  const classInput = $<HTMLTextAreaElement>('class-input');
   const classMsg = $<HTMLParagraphElement>('class-msg');
   const sendName = $<HTMLInputElement>('send-name');
   const sendGroup = $<HTMLInputElement>('send-group');
@@ -117,94 +116,154 @@ export function setupClassPanel(host: ClassHost): ClassPanel {
     }
   }
 
-  function openRanking(): void {
+  // 大きく映すとき（教室の画面用）は、30秒ごとに自動で読み直す。ウェブアプリも30秒ごとにしか読み直さない
+  const bigButton = $<HTMLButtonElement>('ranking-big');
+  let autoReload: ReturnType<typeof setInterval> | null = null;
+  function setBig(big: boolean): void {
+    rankingDialog.classList.toggle('big', big);
+    bigButton.textContent = big ? '小さくもどす' : '大きく映す';
+    if (autoReload) clearInterval(autoReload);
+    autoReload = big ? setInterval(() => void loadRanking(), 30000) : null;
+  }
+
+  function openRanking(big = false): void {
     if (!classForm()?.ranking) return;
     host.closeMenu();
+    setBig(big);
     rankingDialog.hidden = false;
     void loadRanking();
   }
 
-  $('ranking-reload').addEventListener('click', () => void loadRanking());
-  $('ranking-close').addEventListener('click', () => {
+  function closeRanking(): void {
     rankingLoad?.abort();
     rankingLoad = null;
+    setBig(false);
     rankingDialog.hidden = true;
-  });
-  $('open-ranking').addEventListener('click', openRanking);
-  $('menu-ranking').addEventListener('click', openRanking);
+  }
 
-  function showClassLink(t: FormTemplate | null): void {
+  bigButton.addEventListener('click', () => setBig(!rankingDialog.classList.contains('big')));
+  $('ranking-reload').addEventListener('click', () => void loadRanking());
+  $('ranking-close').addEventListener('click', closeRanking);
+  $('open-ranking').addEventListener('click', () => openRanking());
+  $('menu-ranking').addEventListener('click', () => openRanking());
+
+  // ---------- 先生用：クラスランキングの準備（①〜⑤の手順） ----------
+
+  /** 手順の進み具合を画面に出す */
+  function refreshSetup(): void {
+    const t = classForm();
+    const state = $('class-state');
+    state.className = `class-state ${t ? 'ok' : ''}`;
+    state.textContent = !t
+      ? 'この端末では、まだ準備していません。'
+      : t.ranking
+        ? '✓ 準備できています：記録を集めて、アプリの中でランキングを見られます。'
+        : '✓ 記録は集められます（アプリの中のランキングはなし。②③をすると見られます）。';
+    $('setup-1').classList.toggle('done', !!t);
+    $('setup-2').classList.toggle('done', !!t?.ranking);
+    $('setup-3').classList.toggle('done', !!t);
+    $('setup-4').classList.toggle('locked', !t);
+    $('setup-5').classList.toggle('locked', !t?.ranking);
     $('class-link-box').hidden = !t;
-    if (!t) return;
-    $<HTMLTextAreaElement>('class-link').value = classLinkFor(location.href, t);
-    const msg = $('class-ranking-msg');
-    if (t.ranking) {
-      rankingInput.value = t.ranking;
-      msg.textContent = 'ランキングの読み先が入っています。このクラスリンクを配ると、生徒もアプリの中でランキングを見られます。';
-      msg.className = 'class-msg ok';
-    } else {
-      rankingInput.value = '';
-      msg.textContent = '';
-      msg.className = 'class-msg';
+    $<HTMLTextAreaElement>('class-link').value = t ? classLinkFor(location.href, t) : '';
+    $('class-link-note').textContent = t?.ranking ? 'ランキングも見られます。' : '';
+    $('class-show-box').hidden = !t?.ranking;
+    $('class-show-note').textContent = t?.ranking
+      ? '教室の大きな画面に映すと、30秒ごとに自動で新しくなります。生徒は、メニューやチャレンジの画面の「ランキング」ボタンで見られます。'
+      : t
+        ? '②③をすると、アプリの中で見られます。「全員」が選べないときは、スプレッドシートの「ランキング」シートを映してください。'
+        : '③まで終わると使えます。';
+  }
+
+  function setClassMsg(text: string, kind: '' | 'ok' | 'ng' = ''): void {
+    classMsg.textContent = text;
+    classMsg.className = `class-msg ${kind}`;
+  }
+
+  function saveSetup(t: FormTemplate): void {
+    saveClassForm(t);
+    refreshSetup();
+    refreshClassStatus();
+  }
+
+  /** 貼ったウェブアプリにつないで確かめる。古い答えが後から届いても無視する */
+  let connecting = 0;
+  async function connectRanking(url: string): Promise<void> {
+    const my = ++connecting;
+    setClassMsg('ウェブアプリにつないでいます…');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 20000);
+    try {
+      const data = await fetchRanking(url, ctrl.signal);
+      if (my !== connecting) return;
+      const fromApp = data.form ? parseFormTemplate(data.form) : null;
+      const base = fromApp?.ok ? fromApp.template : classForm();
+      if (!base) {
+        setClassMsg(
+          'つながりましたが、スクリプトが前の版のようです。①でスクリプトをコピーし直して貼りかえ、「デプロイ」→「デプロイを管理」→ 鉛筆のマーク →「バージョン」を「新バージョン」にして「デプロイ」してから、もう一度貼ってください。',
+          'ng',
+        );
+        return;
+      }
+      saveSetup({ ...base, ranking: url });
+      setClassMsg(`つながりました（今の記録 ${data.total} 人）。④のクラスリンクを配ってください。`, 'ok');
+    } catch (e) {
+      if (my !== connecting) return;
+      setClassMsg(
+        e instanceof RankingSheetError
+          ? 'ウェブアプリには届きましたが、記録のスプレッドシートが見つかりません。①の「実行」を先にしてから、もう一度貼ってください。'
+          : 'ウェブアプリから答えがありません。②で「アクセスできるユーザー」を「全員」にしたか確かめてください。学校のアカウントで「全員」が選べないときは、下の「「全員」が選べないとき」を見てください。',
+        'ng',
+      );
+    } finally {
+      clearTimeout(timer);
     }
   }
 
-  const rankingInput = $<HTMLInputElement>('class-ranking');
-  rankingInput.addEventListener('input', () => {
-    const t = classForm();
-    const msg = $('class-ranking-msg');
-    if (!t) return;
-    const v = rankingInput.value.trim();
+  const pasteInput = $<HTMLInputElement>('class-paste');
+  pasteInput.addEventListener('input', () => {
+    const v = pasteInput.value.trim();
+    connecting++;
     if (!v) {
-      if (t.ranking) {
-        const { ranking: _drop, ...rest } = t;
-        void _drop;
-        saveClassForm(rest);
-        showClassLink(rest);
-        refreshClassStatus();
-      }
+      setClassMsg('');
       return;
     }
-    const url = parseRankingUrl(v);
-    if (!url) {
-      msg.textContent = 'ウェブアプリの URL ではありません。Apps Script の「デプロイ」→「デプロイを管理」で出る、https://script.google.com/ で始まり /exec で終わる URL を貼ってください。';
-      msg.className = 'class-msg ng';
+    const r = parseTeacherInput(v);
+    if (r.kind === 'error') {
+      setClassMsg(r.reason, 'ng');
       return;
     }
-    const next = { ...t, ranking: url };
-    saveClassForm(next);
-    showClassLink(next);
-    refreshClassStatus();
+    if (r.kind === 'ranking') {
+      void connectRanking(r.url);
+      return;
+    }
+    // 同じフォームの事前入力リンクを貼り直したときは、つないだランキングはそのまま
+    const prev = classForm();
+    const keep = !r.template.ranking && prev?.ranking && prev.url === r.template.url ? { ranking: prev.ranking } : {};
+    saveSetup({ ...r.template, ...keep });
+    const extra = r.unused.length > 0 ? `（${r.unused.length}つの質問はなしで送ります）` : '';
+    setClassMsg(`読み取れました${extra}。④のクラスリンクを配ってください。`, 'ok');
   });
 
   function openClassDialog(): void {
-    classInput.value = '';
-    classMsg.textContent = '';
-    classMsg.className = 'class-msg';
-    const t = classForm();
-    if (t) {
-      classMsg.textContent = 'この端末は設定ずみです。別のフォームにするときは、新しいリンクを貼ってください。';
-      classMsg.className = 'class-msg ok';
-    }
-    showClassLink(t);
+    pasteInput.value = '';
+    connecting++;
+    setClassMsg('');
+    refreshSetup();
     host.closeMenu();
     classDialog.hidden = false;
   }
 
-  classInput.addEventListener('input', () => {
-    if (!classInput.value.trim()) return;
-    const r = parseFormTemplate(classInput.value);
-    if (!r.ok) {
-      classMsg.textContent = r.reason;
+  $('class-script-open').addEventListener('click', () => {
+    const url = 'https://script.google.com/home/projects/create';
+    if (!openTab(url)) {
       classMsg.className = 'class-msg ng';
-      return;
+      showFallbackLink(classMsg, url, 'Apps Script を開く');
     }
-    saveClassForm(r.template);
-    const extra = r.unused.length > 0 ? `（${r.unused.length}つの質問はなしで送ります）` : '';
-    classMsg.textContent = `読み取れました${extra}。下のクラスリンクを生徒に配ってください。`;
-    classMsg.className = 'class-msg ok';
-    showClassLink(r.template);
-    refreshClassStatus();
+  });
+  $('class-show').addEventListener('click', () => {
+    classDialog.hidden = true;
+    openRanking(true);
   });
 
   const classCopy = $<HTMLButtonElement>('class-copy');
@@ -234,7 +293,7 @@ export function setupClassPanel(host: ClassHost): ClassPanel {
       tmp.remove();
       scriptCopy.textContent = ok ? 'コピーしました' : 'コピーできませんでした';
     }
-    setTimeout(() => (scriptCopy.textContent = 'フォームを作るスクリプトをコピー'), 3000);
+    setTimeout(() => (scriptCopy.textContent = '1. スクリプトをコピー'), 3000);
   });
   $('class-test').addEventListener('click', () => {
     const t = classForm();
@@ -246,7 +305,7 @@ export function setupClassPanel(host: ClassHost): ClassPanel {
     }
   });
   $('class-forget').addEventListener('click', () => {
-    if (!confirm('この端末のクラスランキングの設定を消しますか？')) return;
+    if (!confirm('この端末のクラスランキングの準備を消しますか？（フォームやスプレッドシートは消えません）')) return;
     clearClassForm();
     openClassDialog();
     refreshClassStatus();

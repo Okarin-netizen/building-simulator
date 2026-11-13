@@ -1,30 +1,29 @@
 /**
  * 最高タワー工房　クラスランキングのフォームを作るスクリプト（先生用）
  *
- * 使い方
- *   1. https://script.google.com を開き、「新しいプロジェクト」を作る
- *   2. 最初から入っている文字をすべて消し、このスクリプトをまるごと貼りつける
- *   3. 上の「実行」を押す（関数は createRankingForm）
+ * 使い方（アプリの「先生用：クラスランキングの準備」と同じ手順）
+ *   ① フォームを作る
+ *      https://script.google.com で「新しいプロジェクト」を作り、最初から入っている文字をすべて消して、
+ *      このスクリプトをまるごと貼りつける。上の「実行」を押す（関数は createRankingForm）
  *      初回は許可を求められるので、自分のアカウントを選んで「許可」する
  *      （「このアプリは Google で確認されていません」と出たら「詳細」→「（安全ではないページ）に移動」）
- *   4. 下の「実行ログ」に、生徒に配る「クラスリンク」とフォーム・ランキング表のリンクが出る
- *      同じリンクは、できたスプレッドシートの「先生用メモ」シートにも書いてある
- *
- * アプリの中でランキングを見られるようにするとき（しなくても記録は集まる）
- *   5. 右上の「デプロイ」→「新しいデプロイ」→ 種類「ウェブアプリ」を選ぶ
+ *   ② ウェブアプリとして公開する
+ *      右上の「デプロイ」→「新しいデプロイ」→ 歯車 →「ウェブアプリ」を選ぶ。
  *      「次のユーザーとして実行」は「自分」、「アクセスできるユーザー」は「全員」にして「デプロイ」
- *   6. 関数を makeClassLink に切りかえて「実行」する。ログに、ランキングも見られるクラスリンクが出るので、
- *      4. のリンクの代わりにこれを配る
- *      （または、デプロイで出た「ウェブアプリの URL」を、アプリの「先生用：クラスランキングの設定」の
- *       「アプリの中でランキングを見せる」の欄に貼っても、同じクラスリンクができる）
- *   前の版のスクリプトでフォームを作った場合も、このスクリプトに貼りかえてデプロイすれば、そのフォームの記録を表示できる
- *   公開されるのは、チャレンジの記録の「順位・組班・ニックネーム・高さ」の上位50件だけ。
+ *   ③ 出てきた「ウェブアプリの URL」をコピーして、アプリの準備画面の③の欄に貼る
+ *      アプリが、生徒に配るクラスリンクを作る（ランキングもアプリの中で見られる）
+ *
+ *   学校のアカウントで「全員」が選べないとき（「組織内のすべてのユーザー」だけのとき）は、②③をとばし、
+ *   ①の実行ログ（またはスプレッドシートの「先生用メモ」シート）に出る「クラスリンク」を配る。
+ *   ランキングは、スプレッドシートの「ランキング」シートを大きな画面に映して使う。
+ *
+ *   公開されるのは、チャレンジの記録の「順位・組班・ニックネーム・高さ」の上位50件と、記録を送るフォームのリンクだけ。
  *   授業が終わったら「デプロイを管理」からアーカイブすると、ランキングは見られなくなる。
  *   このスクリプトを新しい版に貼りかえたときは、「デプロイを管理」→ 鉛筆のマーク →「バージョン」を「新バージョン」にして
  *   「デプロイ」を押す（URL は変わらないので、クラスリンクは配り直さなくてよい）。
+ *   前の版のスクリプトでフォームを作った場合も、このスクリプトに貼りかえてデプロイすれば、そのフォームの記録を表示できる。
  *   ランキングは30秒ごとに読み直す。クラス全員がいっせいに開いても動くようにするため。
- *   学校のアカウントで「全員」が選べないとき（「組織内のすべてのユーザー」だけのとき）は、アプリの中では見られない。
- *   そのときは、スプレッドシートの「ランキング」シートを大きな画面に映して使う。
+ *   （関数 makeClassLink を実行しても、ランキング入りのクラスリンクがログに出る）
  *
  * できるもの（先生のマイドライブ）
  *   - Google フォーム「最高タワー工房 クラスランキング」
@@ -105,7 +104,7 @@ function createRankingForm() {
     ['ランキング表（このスプレッドシート）', ss.getUrl()],
     ['フォームの編集', form.getEditUrl()],
     ['フォームの回答ページ', form.getPublishedUrl()],
-    ['事前入力リンク（アプリの「先生用：クラスランキングの設定」に貼っても同じクラスリンクができます）', prefilledUrl],
+    ['事前入力リンク（アプリの「先生用：クラスランキングの準備」の③に貼っても同じクラスリンクができます）', prefilledUrl],
     ['作った日時', new Date()],
   ];
   memo.getRange(1, 1, rows.length, 2).setValues(rows);
@@ -116,11 +115,10 @@ function createRankingForm() {
 
   ss.setActiveSheet(ranking);
 
-  Logger.log('できました。');
-  Logger.log('■ 生徒に配るクラスリンク（Classroom などで配る）\n' + classLink);
-  Logger.log('■ ランキング表\n' + ss.getUrl());
-  Logger.log('■ フォームの編集\n' + form.getEditUrl());
-  Logger.log('アプリの中でランキングを見られるようにするときは、ウェブアプリとしてデプロイしてから makeClassLink を実行してください。');
+  Logger.log('①ができました。次は②：右上の「デプロイ」→「新しいデプロイ」→ 歯車 →「ウェブアプリ」で、' +
+    'アクセスできるユーザーを「全員」にしてデプロイし、出てきた URL をアプリの準備画面の③に貼ってください。');
+  Logger.log('■ 「全員」が選べないときは、このクラスリンクを生徒に配る（ランキングはスプレッドシートを映す）\n' + classLink);
+  Logger.log('■ ランキング表（スプレッドシート）\n' + ss.getUrl());
   return classLink;
 }
 
@@ -191,7 +189,41 @@ function readRankingJson_() {
     })[0];
     var data = computeRanking_(responses.getDataRange().getValues(), RANKING_LIMIT);
     data.updated = new Date().toISOString();
+    // アプリの準備画面が、このウェブアプリの URL だけからクラスリンクを作れるように、記録を送るフォームのリンクも返す
+    var form = prefilledUrl_(responses.getFormUrl());
+    if (form) data.form = form;
     return JSON.stringify(data);
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * 記録を送るフォームの事前入力リンク（各質問に NAME などを入れたもの）。
+ * 前の版のスクリプトで作ったときは保存されていないので、フォームの質問の名前から作って覚えておく。作れないときは null
+ */
+function prefilledUrl_(formUrl) {
+  var props = PropertiesService.getScriptProperties();
+  var saved = props.getProperty('PREFILLED_URL');
+  if (saved) return saved;
+  try {
+    var form = FormApp.openByUrl(formUrl);
+    var byTitle = {};
+    form.getItems(FormApp.ItemType.TEXT).forEach(function (item) {
+      byTitle[String(item.getTitle()).trim()] = item.asTextItem();
+    });
+    var response = form.createResponse();
+    var found = 0;
+    RANKING_QUESTIONS.forEach(function (q) {
+      var item = byTitle[q.title];
+      if (!item) return;
+      response.withItemResponse(item.createResponse(q.placeholder));
+      found++;
+    });
+    if (!found) return null;
+    var url = response.toPrefilledUrl();
+    props.setProperty('PREFILLED_URL', url);
+    return url;
   } catch (err) {
     return null;
   }

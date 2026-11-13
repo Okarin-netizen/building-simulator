@@ -151,7 +151,7 @@
         <div class="menu-free">
           <button type="button" id="free-mode">自由に作る（実験モード）</button>
           <button type="button" id="menu-ranking" hidden>クラスランキングを見る</button>
-          <button type="button" id="open-class">先生用：クラスランキングの設定</button>
+          <button type="button" id="open-class">先生用：クラスランキングの準備</button>
         </div>
         <p class="class-status" id="class-status"></p>
         <p class="credit">作者：技術科　岡田</p>
@@ -231,46 +231,67 @@
     </div>
 
     <div class="menu" id="class-dialog" hidden>
-      <div class="menu-card">
-        <h2>クラスランキングの設定（先生用）</h2>
-        <p class="note">生徒の記録を、先生の Google フォームに集めます。サーバーは使わず、記録はフォームの回答（スプレッドシート）にだけ残ります。</p>
-        <h3>かんたん：スクリプトで一度に作る</h3>
-        <ol class="steps">
-          <li><button type="button" id="class-script-copy" class="primary">フォームを作るスクリプトをコピー</button></li>
-          <li><a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">Google Apps Script</a> で新しいプロジェクトを開き、中の文字を消して貼りつける</li>
-          <li>「実行」を押し、自分のアカウントで許可する（「確認されていません」と出たら「詳細」→「移動」）</li>
-          <li>実行ログに出る<b>クラスリンク</b>を生徒に配る。フォームと回答のスプレッドシートが先生のドライブにでき、「ランキング」シートにチャレンジの記録が高い順に自動で並びます</li>
-          <li>アプリの中でもランキングを見せるときは、Apps Script の「デプロイ」→「新しいデプロイ」→ 歯車で「ウェブアプリ」を選び、次のユーザーとして実行「自分」、アクセスできるユーザー「全員」でデプロイする。出てきた<b>ウェブアプリの URL</b>を、下の「アプリの中でランキングを見せる」の欄に貼り、できたクラスリンクを配る（関数 <code>makeClassLink</code> を実行してログのリンクを使ってもよい）。見えるのは順位・組班・ニックネーム・高さだけ</li>
+      <div class="menu-card class-card">
+        <h2>クラスランキングの準備（先生用）</h2>
+        <p class="note">生徒の記録を先生の Google フォームに集めて、アプリの中で順位を見せます。授業の前に1回だけ、上から順にやってください（10分ほど）。記録は先生のスプレッドシートにだけ残ります。</p>
+        <p class="class-state" id="class-state"></p>
+        <ol class="setup">
+          <li id="setup-1">
+            <h3>フォームを作る</h3>
+            <div class="buttons">
+              <button type="button" id="class-script-copy" class="primary">1. スクリプトをコピー</button>
+              <button type="button" id="class-script-open">2. Apps Script を開く</button>
+            </div>
+            <p class="note">開いた画面の中の文字を<b>全部消して貼りつけ</b>、上の「▷ 実行」を押します。許可を聞かれたら自分のアカウントで「許可」（「確認されていません」と出たら「詳細」→「移動」）。下に「①ができました」と出たら完了です。</p>
+          </li>
+          <li id="setup-2">
+            <h3>ウェブアプリとして公開する</h3>
+            <p class="note">同じ画面の右上「<b>デプロイ</b>」→「<b>新しいデプロイ</b>」→ 歯車のマーク →「<b>ウェブアプリ</b>」。<br><b>アクセスできるユーザー</b>を「<b>全員</b>」にして「デプロイ」を押し、出てきた<b>ウェブアプリの URL</b> をコピーします。</p>
+          </li>
+          <li id="setup-3">
+            <h3>URL をここに貼る</h3>
+            <input type="url" id="class-paste" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" />
+            <p class="class-msg" id="class-msg"></p>
+          </li>
+          <li id="setup-4" class="locked">
+            <h3>生徒にクラスリンクを配る</h3>
+            <div class="class-link" id="class-link-box" hidden>
+              <textarea id="class-link" rows="2" readonly></textarea>
+              <div class="buttons">
+                <button type="button" id="class-copy" class="primary">リンクをコピー</button>
+                <button type="button" id="class-test">ためしに送ってみる</button>
+              </div>
+              <p class="note">Classroom などで配ってください。このリンクから開くと、結果カードに「クラスに送る」が出ます。<span id="class-link-note"></span></p>
+            </div>
+          </li>
+          <li id="setup-5" class="locked">
+            <h3>授業でランキングを映す</h3>
+            <div class="buttons" id="class-show-box" hidden>
+              <button type="button" id="class-show" class="primary">ランキングを大きく映す</button>
+            </div>
+            <p class="note" id="class-show-note">③まで終わると使えます。生徒は、メニューやチャレンジの画面の「ランキング」ボタンで見られます。</p>
+          </li>
         </ol>
         <details class="class-manual">
-          <summary>自分でフォームを作るときは</summary>
+          <summary>学校のアカウントで「全員」が選べないとき</summary>
+          <ol class="steps">
+            <li>②はとばします</li>
+            <li>①の実行ログ（またはできたスプレッドシートの「先生用メモ」シート）にある<b>クラスリンク</b>を、③の欄に貼るか、そのまま生徒に配ります。記録は集まります</li>
+            <li>アプリの中ではランキングを見られないので、スプレッドシートの「<b>ランキング</b>」シートを大きな画面に映してください（記録が来るたびに自動で並びかわります）</li>
+          </ol>
+        </details>
+        <details class="class-manual">
+          <summary>スクリプトを使わず、自分でフォームを作るとき</summary>
           <ol class="steps">
             <li>Google フォームを作り、記述式（短文・入力チェックなし）の質問を作る：<b>ニックネーム</b>・<b>ステージ</b>・<b>高さ</b>（必須）、<b>組・班</b>・<b>星</b>・<b>費用</b>・<b>結果</b>（なくてもよい）</li>
             <li>フォームの「︙」→「事前入力したURLを取得」で、各質問に次の英字を入れる：<br><code>NAME</code>・<code>STAGE</code>・<code>HEIGHT</code>・<code>GROUP</code>・<code>STARS</code>・<code>COST</code>・<code>RESULT</code></li>
-            <li>「リンクを取得」→「リンクをコピー」して、下に貼る</li>
+            <li>「リンクを取得」→「リンクをコピー」して、③の欄に貼る</li>
             <li>授業では、回答のスプレッドシートを「高さ」の列で降順（Z→A）に並べ替えると、ランキングになります</li>
           </ol>
-          <label>事前入力リンク
-            <textarea id="class-input" rows="3" placeholder="https://docs.google.com/forms/d/e/…/viewform?usp=pp_url&amp;entry.…=NAME…"></textarea>
-          </label>
         </details>
-        <p class="class-msg" id="class-msg"></p>
-        <div class="class-link" id="class-link-box" hidden>
-          <h3>生徒に配るクラスリンク</h3>
-          <p class="note">このリンクを Classroom などで配ってください。開いた端末で「クラスに送る」が使えるようになります。</p>
-          <textarea id="class-link" rows="3" readonly></textarea>
-          <div class="buttons">
-            <button type="button" id="class-copy" class="primary">リンクをコピー</button>
-            <button type="button" id="class-test">記入済みフォームを試しに開く</button>
-          </div>
-          <h3>アプリの中でランキングを見せる</h3>
-          <p class="note">Apps Script を「ウェブアプリ」としてデプロイしたときに出る URL（https://script.google.com/…/exec）を貼ると、上のクラスリンクにランキングの読み先が入ります。貼ったあとのクラスリンクを配り直してください。</p>
-          <input type="url" id="class-ranking" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" />
-          <p class="class-msg" id="class-ranking-msg"></p>
-        </div>
         <div class="buttons sheet-actions">
           <button type="button" id="class-forget">この端末の設定を消す</button>
-          <button type="button" id="class-close">閉じる</button>
+          <button type="button" id="class-close" class="primary">閉じる</button>
         </div>
       </div>
     </div>
@@ -306,6 +327,7 @@
         </div>
         <p class="note" id="ranking-updated"></p>
         <div class="buttons sheet-actions">
+          <button type="button" id="ranking-big">大きく映す</button>
           <button type="button" id="ranking-reload">更新する</button>
           <button type="button" id="ranking-close" class="primary">閉じる</button>
         </div>
