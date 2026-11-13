@@ -988,6 +988,77 @@ canvas {
   margin: 4px 0 4px;
 }
 
+.class-card {
+  width: min(700px, 100%);
+}
+
+.class-state {
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--yellow-soft);
+  border-radius: 10px;
+  padding: 8px 12px;
+  margin: 0 0 12px;
+}
+
+.class-state.ok {
+  color: var(--green);
+}
+
+/* 準備の手順：丸い番号と、終わった所の ✓ */
+.setup {
+  list-style: none;
+  counter-reset: setup;
+  padding: 0;
+  margin: 0 0 12px;
+}
+
+.setup > li {
+  counter-increment: setup;
+  position: relative;
+  padding: 0 0 12px 44px;
+  margin: 0 0 12px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.setup > li::before {
+  content: counter(setup);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid var(--ink);
+  background: var(--yellow);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 16px;
+}
+
+.setup > li.done::before {
+  content: '✓';
+  background: var(--green);
+  color: #fff;
+}
+
+.setup > li.locked {
+  opacity: 0.55;
+}
+
+.setup > li .buttons {
+  margin: 4px 0 6px;
+}
+
+.setup > li .note {
+  margin: 4px 0 0;
+}
+
+#class-dialog .setup h3 {
+  margin: 4px 0 6px;
+}
+
 .class-manual {
   margin: 0 0 10px;
 }
@@ -1081,6 +1152,35 @@ canvas {
 
 .ranking-table tr.podium td:first-child {
   color: #8a5a00;
+}
+
+/* 教室の大きな画面に映すとき */
+#ranking-dialog.big .ranking-card {
+  width: min(1100px, 100%);
+}
+
+#ranking-dialog.big h2 {
+  font-size: 40px;
+}
+
+#ranking-dialog.big .ranking-scroll {
+  max-height: calc(100vh - 260px);
+}
+
+#ranking-dialog.big .ranking-table {
+  font-size: 30px;
+}
+
+#ranking-dialog.big .ranking-table th {
+  font-size: 20px;
+}
+
+#ranking-dialog.big .ranking-table td {
+  padding: 10px 16px;
+}
+
+#ranking-dialog.big .note {
+  font-size: 18px;
 }
 
 .ranking-table tr.mine td {
@@ -1432,5 +1532,9 @@ canvas {
 /* ボタンに display を指定しているので、hidden のときは確実に消す */
 .top-actions button[hidden],
 .sheet-actions button[hidden] {
+  display: none;
+}
+
+#class-dialog .buttons[hidden] {
   display: none;
 }

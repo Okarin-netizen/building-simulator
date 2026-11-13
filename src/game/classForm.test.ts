@@ -1,4 +1,4 @@
-import { buildSubmitUrl, classLinkFor, parseFormTemplate, readClassLink, validateTemplate } from './classForm';
+import { buildSubmitUrl, classLinkFor, parseFormTemplate, parseTeacherInput, readClassLink, validateTemplate } from './classForm';
 
 const PREFILL =
   'https://docs.google.com/forms/d/e/1FAIpQLSabc_DEF-123/viewform?usp=pp_url&entry.111=NAME&entry.222=GROUP&entry.333=STAGE&entry.444=HEIGHT&entry.555=STARS';
@@ -50,5 +50,39 @@ describe('Google フォームの事前入力リンク', () => {
     expect(readClassLink('#class=%7Bbroken')).toBeNull();
     expect(validateTemplate({ url: 'https://evil.example.com/forms/d/e/X/viewform', entries: r.template.entries })).toBeNull();
     expect(validateTemplate({ url: r.template.url, entries: { ...r.template.entries, name: 'javascript:1' } })).toBeNull();
+  });
+});
+
+describe('先生の準備画面：1つの欄に何を貼っても読む', () => {
+  test('ウェブアプリの URL（/dev や ? のあとが付いていても）', () => {
+    expect(parseTeacherInput(' https://script.google.com/macros/s/AKfy_1/exec ')).toEqual({ kind: 'ranking', url: 'https://script.google.com/macros/s/AKfy_1/exec' });
+    expect(parseTeacherInput('https://script.google.com/macros/s/AKfy_1/dev?x=1')).toEqual({ kind: 'ranking', url: 'https://script.google.com/macros/s/AKfy_1/exec' });
+  });
+
+  test('スクリプトの編集画面の URL をまちがえて貼ったら、何を貼るかを知らせる', () => {
+    const r = parseTeacherInput('https://script.google.com/home/projects/ABC/edit');
+    expect(r.kind).toBe('error');
+    if (r.kind === 'error') expect(r.reason).toContain('/exec');
+  });
+
+  test('実行ログのクラスリンク（ランキング入りでも）', () => {
+    const r = parseFormTemplate(PREFILL);
+    if (!r.ok) throw new Error();
+    const link = classLinkFor('https://okarin-netizen.github.io/building-simulator/', { ...r.template, ranking: 'https://script.google.com/macros/s/A/exec' });
+    const got = parseTeacherInput(link);
+    expect(got.kind).toBe('template');
+    if (got.kind === 'template') expect(got.template).toEqual({ ...r.template, ranking: 'https://script.google.com/macros/s/A/exec' });
+  });
+
+  test('フォームの事前入力リンク', () => {
+    const got = parseTeacherInput(PREFILL);
+    expect(got.kind).toBe('template');
+    if (got.kind === 'template') expect(got.unused).toEqual(['cost', 'result']);
+  });
+
+  test('関係のない文字やリンク', () => {
+    expect(parseTeacherInput('こんにちは').kind).toBe('error');
+    expect(parseTeacherInput('https://example.com/#class=%7Bbroken').kind).toBe('error');
+    expect(parseTeacherInput('https://docs.google.com/forms/d/e/X/viewform').kind).toBe('error');
   });
 });

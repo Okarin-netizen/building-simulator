@@ -43,6 +43,9 @@ describe('アプリ内のクラスランキング', () => {
     expect(r?.total).toBe(3);
     expect(r?.updated?.toISOString()).toBe('2026-11-10T03:00:00.000Z');
     expect(parseRanking({ error: 'x' })).toBeNull();
+    // 新しい版のスクリプトは、記録を送るフォームのリンクも返す（先生の準備画面で使う）
+    expect(parseRanking({ rows: [], total: 0, form: 'https://docs.google.com/forms/d/e/X/viewform?entry.1=NAME' })?.form).toContain('NAME');
+    expect(parseRanking({ rows: [], total: 0 })).not.toHaveProperty('form');
     expect(parseRanking('<html>')).toBeNull();
   });
 
