@@ -287,6 +287,8 @@ export function drawDesign(
   goalHeight = 0,
   pinMember: number | null = null,
   selectedMember: number | null = null,
+  /** 置いたばかりの部材（t：0 置いた瞬間 → 1 落ち着いた）。はまった手応えを出す */
+  placed: { indices: number[]; t: number } | null = null,
 ): void {
   drawBackground(ctx, v, w, h, 0);
   drawGridDots(ctx, v);
@@ -305,9 +307,19 @@ export function drawDesign(
     ctx.lineWidth = memberWidth(v) + 9;
     strokeLine(ctx, a, b);
   }
+  const glowing = placed && placed.t < 1 ? new Set(placed.indices) : null;
+  if (placed && glowing) {
+    // 置いた瞬間に太く白く光り、すぐ元の太さに戻る
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.9 * (1 - placed.t)})`;
+    ctx.lineWidth = memberWidth(v) + 12 * (1 - placed.t);
+    for (const i of glowing) {
+      const m = design.members[i];
+      if (m) strokeLine(ctx, screenOf(v, design.nodes[m.a]), screenOf(v, design.nodes[m.b]));
+    }
+  }
   design.members.forEach((m, i) => {
     ctx.strokeStyle = i === hoverMember ? '#d93a2b' : MATERIALS[m.material].color;
-    ctx.lineWidth = memberWidth(v);
+    ctx.lineWidth = memberWidth(v) * (placed && glowing?.has(i) ? 1 + 0.5 * (1 - placed.t) : 1);
     strokeLine(ctx, screenOf(v, design.nodes[m.a]), screenOf(v, design.nodes[m.b]));
   });
 
@@ -562,5 +574,89 @@ export function drawLoupe(
     ctx.textBaseline = 'middle';
     ctx.fillText(label, c.x, ly + 1);
   }
+  ctx.restore();
+}
+
+// ---------- 手応えの演出（こわれた瞬間・倒れた瞬間） ----------
+
+/** 最初にこわれた所の、いまの画面の位置 */
+export function firstBreakScreen(v: Viewport, world: World, fb: FirstBreak): ScreenPoint {
+  return screenOf(v, fb.kind === 'joint' ? world.nodes[fb.node] : memberMidpoint(world, fb.index));
+}
+
+/**
+ * こわれた瞬間の印：黄色と黒のギザギザの光と、一言（「バキッ！」など）。
+ * t は 0（出た瞬間）→ 1（消える）。はじめ大きく、すぐ落ち着く。
+ */
+export function drawImpact(ctx: CanvasRenderingContext2D, p: ScreenPoint, t: number, label: string, labelColor = '#1f1f1f'): void {
+  if (t < 0 || t > 1) return;
+  ctx.save();
+  const grow = t < 0.15 ? 0.6 + (t / 0.15) * 0.6 : 1.2 - Math.min(1, (t - 0.15) / 0.5) * 0.2;
+  const alpha = t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
+  ctx.globalAlpha = alpha;
+  // ギザギザの光（黒ふちの黄色）
+  const spikes = 10;
+  const r1 = 34 * grow;
+  const r0 = 16 * grow;
+  ctx.beginPath();
+  for (let i = 0; i <= spikes * 2; i++) {
+    const a = (i / (spikes * 2)) * Math.PI * 2 + 0.2;
+    const r = i % 2 === 0 ? r1 : r0;
+    const x = p.sx + Math.cos(a) * r;
+    const y = p.sy + Math.sin(a) * r;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = '#f6c343';
+  ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#1f1f1f';
+  ctx.stroke();
+  // 一言の吹き出し
+  ctx.font = `900 ${Math.round(22 * Math.min(1.1, grow))}px "Dela Gothic One", system-ui`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const ty = p.sy - r1 - 18;
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#ffffff';
+  ctx.strokeText(label, p.sx, ty);
+  ctx.fillStyle = labelColor;
+  ctx.fillText(label, p.sx, ty);
+  ctx.restore();
+}
+
+/** 倒れた瞬間の土ぼこり。t は 0 → 1 */
+export function drawDust(ctx: CanvasRenderingContext2D, v: Viewport, xs: number[], t: number): void {
+  if (t < 0 || t > 1 || xs.length === 0) return;
+  ctx.save();
+  ctx.globalAlpha = 0.55 * (1 - t);
+  ctx.fillStyle = '#a88a62';
+  const lo = Math.min(...xs);
+  const hi = Math.max(...xs);
+  for (let i = 0; i < 9; i++) {
+    const x = lo + ((hi - lo) * i) / 8;
+    const p = toScreen(v, x, 0);
+    const r = (10 + (i % 3) * 6) * (0.6 + t * 1.4);
+    ctx.beginPath();
+    ctx.arc(p.sx + (i % 2 ? 1 : -1) * t * 18, p.sy - r * 0.5 - t * 12, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** 地震の前ぶれ（「ゴゴゴ…」）。画面の上のほうに出す */
+export function drawRumble(ctx: CanvasRenderingContext2D, w: number, t: number): void {
+  if (t < 0 || t > 1) return;
+  ctx.save();
+  ctx.globalAlpha = t < 0.2 ? t / 0.2 : t > 0.8 ? (1 - t) / 0.2 : 1;
+  ctx.font = '900 30px "Dela Gothic One", system-ui';
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#ffffff';
+  const jx = Math.sin(t * 90) * 2;
+  ctx.strokeText('ゴゴゴゴ…', w / 2 + jx, 150);
+  ctx.fillStyle = '#5a4126';
+  ctx.fillText('ゴゴゴゴ…', w / 2 + jx, 150);
   ctx.restore();
 }
