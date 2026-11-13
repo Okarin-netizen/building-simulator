@@ -6,6 +6,8 @@ export interface RankingRow {
   group: string;
   name: string;
   height: number;
+  /** その記録の星の数（0〜3）。前の版のスクリプトは返さない */
+  stars?: number;
 }
 
 export interface Ranking {
@@ -32,7 +34,8 @@ export function parseRanking(raw: unknown): Ranking | null {
     const height = num(o.height);
     const name = text(o.name);
     if (rank === null || height === null || !name) continue;
-    rows.push({ rank, group: text(o.group), name, height });
+    const stars = num(o.stars);
+    rows.push({ rank, group: text(o.group), name, height, ...(stars === null ? {} : { stars: Math.min(3, Math.round(stars)) }) });
   }
   const updated = typeof r.updated === 'string' ? new Date(r.updated) : null;
   return {
@@ -60,3 +63,6 @@ export async function fetchRanking(url: string, signal?: AbortSignal): Promise<R
   if (!data) throw new Error('形がちがう');
   return data;
 }
+
+/** 星の数を ★★☆ の形にする */
+export const starText = (n: number) => '★'.repeat(n) + '☆'.repeat(3 - n);

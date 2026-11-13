@@ -172,13 +172,24 @@ describe('先生用スクリプト：アプリ内ランキング', () => {
     );
     expect(r.total).toBe(4);
     expect(r.rows).toEqual([
-      { rank: 1, group: '1-1', name: 'たろう', height: 12 },
-      { rank: 1, group: '1-2', name: 'はなこ', height: 12 },
-      { rank: 3, group: '', name: 'じろう', height: 6 },
-      { rank: 4, group: '1-3', name: 'さぶろう', height: 0 },
+      { rank: 1, group: '1-1', name: 'たろう', height: 12, stars: 3 },
+      { rank: 1, group: '1-2', name: 'はなこ', height: 12, stars: 3 },
+      { rank: 3, group: '', name: 'じろう', height: 6, stars: 3 },
+      { rank: 4, group: '1-3', name: 'さぶろう', height: 0, stars: 3 },
     ]);
     // 時刻や費用などは返さない
-    expect(Object.keys(r.rows[0]).sort()).toEqual(['group', 'height', 'name', 'rank']);
+    expect(Object.keys(r.rows[0]).sort()).toEqual(['group', 'height', 'name', 'rank', 'stars']);
+  });
+
+  test('星は一番高い記録のものを出し、同じ高さなら星の多い人を上にする', () => {
+    const { computeRanking_ } = load() as any;
+    const r2 = (name: string, height: number, stars: unknown) => [new Date(), name, '', CH, height, stars, 100, 'クリア'];
+    const r = computeRanking_([HEAD, r2('あ', 20, 1), r2('あ', 15, 3), r2('い', 20, 2), r2('い', 20, 3), r2('う', 20, 'x')], 50);
+    expect(r.rows).toEqual([
+      { rank: 1, group: '', name: 'い', height: 20, stars: 3 },
+      { rank: 1, group: '', name: 'あ', height: 20, stars: 1 },
+      { rank: 1, group: '', name: 'う', height: 20, stars: 0 },
+    ]);
   });
 
   test('件数の上限を守り、列の順番が変わっても見出しで探す', () => {

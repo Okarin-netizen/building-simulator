@@ -1143,11 +1143,22 @@ canvas {
   font-weight: 700;
 }
 
-.ranking-table td:last-child,
-.ranking-table th:last-child {
+.ranking-table td:nth-child(4),
+.ranking-table th:nth-child(4) {
   text-align: right;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.ranking-table td.stars,
+.ranking-table th:nth-child(5) {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.ranking-table td.stars {
+  color: #c98a00;
+  letter-spacing: 1px;
 }
 
 .ranking-table tr.podium td:first-child {
@@ -1164,7 +1175,7 @@ canvas {
 }
 
 #ranking-dialog.big .ranking-scroll {
-  max-height: calc(100vh - 260px);
+  max-height: calc(100vh - 300px);
 }
 
 #ranking-dialog.big .ranking-table {
