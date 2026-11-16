@@ -10,7 +10,7 @@ import { breakAdvice, breakFloor, judgePrediction, describeMember, type Predicti
 import { brokenCount } from './physics/world';
 import { compareTries } from './game/compare';
 import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
-import { loadDesign, loadLastStage, loadLastTry, loadProgress, logAttempt, recordResult, saveDesign, saveLastStage, saveLastTry } from './game/progress';
+import { loadDesign, loadLastStage, loadLastTry, loadProgress, logAttempt, recordResult, saveDesign, saveLastStage, saveLastTry, clearAllRecords } from './game/progress';
 import { APP_LICENSE, AUTHOR, CHANGELOG, MIT_TEXT, THIRD_PARTY } from './game/about';
 import { CHAPTER_NAMES, nextStage, stageById, stageFullTitle, stageLabel, STAGES, type Stage } from './game/stages';
 import { $, askConfirm, closeOnBackdrop, el } from './ui/dom';
@@ -226,6 +226,16 @@ function openMenu(): void {
 
 $('open-menu').addEventListener('click', openMenu);
 $('free-mode').addEventListener('click', () => openStage(null));
+$('reset-records').addEventListener('click', async () => {
+  const ok = await askConfirm(
+    'この端末の今までの記録をすべて消して、最初からやり直しますか？　星・チャレンジの記録・作りかけの建物・倒れた回数・ふりかえりの書きこみが消えます。元には戻せません。（クラスランキングに送った記録は消えません）',
+    '記録を消す',
+  );
+  if (!ok) return;
+  clearAllRecords();
+  // 倒れた回数などの、画面を開いている間だけの記録も消すため、開き直す
+  location.reload();
+});
 closeOnBackdrop(menu);
 
 // ---------- パネル ----------

@@ -179,3 +179,21 @@ export function saveLastTry(stageId: string, t: TrySummary): void {
   const all = read<Record<string, TrySummary>>(LAST_TRY_KEY);
   write(LAST_TRY_KEY, { ...(all && typeof all === 'object' && !Array.isArray(all) ? all : {}), [stageId]: t });
 }
+
+// ---------- 記録をまとめて消す ----------
+
+/** この端末の、今までの記録（星・最高記録・作りかけの建物・試験の記録・ふりかえりの書きこみ・前回の結果）をすべて消す。
+ * 先生のクラスランキングの準備と、音の設定は残す。 */
+export function clearAllRecords(): void {
+  try {
+    const keep = new Set([CLASS_KEY, 'saikou-tower-sound-v1']);
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('saikou-tower-') && !keep.has(k)) keys.push(k);
+    }
+    for (const k of keys) localStorage.removeItem(k);
+  } catch {
+    // 保存が使えない環境では、消すものもない
+  }
+}

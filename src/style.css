@@ -814,7 +814,8 @@ canvas {
   flex: 1 1 auto;
 }
 
-.select-box button.danger {
+.select-box button.danger,
+.menu-free button.danger {
   border-color: var(--red);
   color: var(--red);
 }
