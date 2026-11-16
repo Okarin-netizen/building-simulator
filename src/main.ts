@@ -83,6 +83,11 @@ const failStreak = new Map<string, number>();
 const HELP_AFTER_FAILS = 3;
 /** 組み立て中に出す手助け（見直す階の帯・お手本の線）。次の試験を始めたら消す */
 let guide: BuildGuide = {};
+/**
+ * 倒れたあとに用意しておく手助け。自動では出さず、生徒が「ヒント」を押したときだけ出す
+ * （自分で考える前に答えの手がかりが出てしまわないように）
+ */
+let pendingHelp: { advice: string | null; guide: BuildGuide } = { advice: null, guide: {} };
 /** はじめて開いた人（1-1 で「まず押してみよう」から始める） */
 let firstVisit = false;
 
@@ -128,6 +133,7 @@ function openStage(s: Stage | null): void {
   $('stage-name').textContent = s ? s.title : '自由に作る';
   $('request').textContent = s ? s.request : '好きな形・材料で建てて、地震の強さや揺れ方を変えて試してみよう。';
   guide = {};
+  pendingHelp = { advice: null, guide: {} };
   hint.textContent =
     firstVisit && s?.id === '1-1'
       ? 'まずはこのまま「地震スタート！」を押して、この建物がどうなるか見てみよう。'
@@ -283,7 +289,15 @@ $('restart').addEventListener('click', async () => {
   if (await askConfirm(message, start.members.length > 0 ? '最初に戻す' : '全部消す')) setDesign(start);
 });
 $('show-hint').addEventListener('click', () => {
-  if (stage) hint.textContent = `ヒント：${stage.hint}`;
+  if (!stage) return;
+  // 倒れたあとなら、こわれ方に合わせた一言と、見直す場所の印（点線・帯）もここで出す
+  guide = pendingHelp.guide;
+  const extra = guide.ghost
+    ? '黄色の点線のように、点から点へドラッグしてななめの部材を置いてみよう。'
+    : guide.band
+      ? '黄色の帯の階が、最初にこわれた所です。'
+      : '';
+  hint.textContent = [`ヒント：${stage.hint}`, pendingHelp.advice, extra].filter(Boolean).join(' ');
 });
 $('toggle-iso').addEventListener('click', () => {
   if (phase !== 'build') return;
@@ -440,11 +454,7 @@ function resetTest(): void {
 
 function backToBuild(): void {
   resetTest();
-  hint.textContent = guide.ghost
-    ? '黄色の点線のように、四角の角から角へ、点から点へドラッグしてななめの部材を置いてみよう。'
-    : guide.band
-      ? '黄色の帯の階が、最初にこわれた所です。三角形が足りているか、材料が合っているか見直そう。'
-      : 'どこを直せば強くなるか考えて、作り直してみよう。';
+  hint.textContent = 'どこを直せば強くなるか考えて、作り直してみよう。';
   refreshPanel();
 }
 
@@ -514,18 +524,15 @@ function showResult(w: World): void {
   if (note) html += `<p class="safety-note">${escapeHtml(note)}${rankNote ? `<br>${escapeHtml(rankNote)}` : ''}</p>`;
   const fails = ev.fell !== 'none' ? (failStreak.get(designId()) ?? 0) + 1 : 0;
   failStreak.set(designId(), fails);
+  pendingHelp = { advice: null, guide: {} };
   if (stage && ev.cleared)
     html += `<div class="lesson"><strong>なぜ？</strong><p class="lesson-point">${escapeHtml(stage.point)}</p><details><summary>くわしく読む</summary>${escapeHtml(stage.lesson)}</details></div>`;
   else if (ev.fell !== 'none') {
-    const advice = breakAdvice(design, w.firstBreak);
     const partly = ev.fell === 'partly' ? '建物の一部が折れて、元の高さから落ちました。くずれた所がある建物は「倒れなかった」になりません。' : '';
-    guide = helpGuide(w, fails);
-    const help = guide.ghost
-      ? '組み立てにもどると、部材を置く場所の例を黄色の点線で示します。点から点へドラッグして置いてみよう。'
-      : guide.band
-        ? `${fails}回続けて倒れたね。組み立てにもどると、最初にこわれた${guide.band.label.replace('ここを見直そう：', '')}を黄色の帯で示します。その階の三角形や材料を見直そう。`
-        : '';
-    html += `<div class="lesson"><strong>見直そう</strong>${partly}スロー再生で、最初にこわれた所（黄色の輪）を確かめよう。${advice ? escapeHtml(advice) : stage ? escapeHtml(stage.hint) : ''}${help ? `<p class="help">${escapeHtml(help)}</p>` : ''}</div>`;
+    // ヒントは自動では出さない。用意だけしておき、「ヒント」ボタンを押したときに出す
+    pendingHelp = { advice: breakAdvice(design, w.firstBreak), guide: helpGuide(w, fails) };
+    const ask = stage ? '自分で考えてもわからないときは、組み立て画面の「ヒント」を押そう。' : '';
+    html += `<div class="lesson"><strong>見直そう</strong>${partly}スロー再生で、最初にこわれた所（黄色の輪）を確かめよう。${ask}</div>`;
   }
   const canSend = lastResult !== null && classPanel.classForm() !== null;
   const canRank = isChallenge && !!classPanel.classForm()?.ranking;
@@ -993,6 +1000,7 @@ canvas.addEventListener('pointerup', (e) => {
       placedFx = { indices: design.members.map((_, i) => i).filter((i) => i >= before), at: performance.now() };
       // お手本の点線は、何か置いたら役目を終える
       if (guide.ghost) guide = { ...guide, ghost: undefined };
+      if (pendingHelp.guide.ghost) pendingHelp = { ...pendingHelp, guide: { ...pendingHelp.guide, ghost: undefined } };
       sound.place();
       // 部材が分かれて番号が変わることがあるので、選んでいた部材は選びなおし
       selectMember(null);
