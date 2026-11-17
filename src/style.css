@@ -1766,3 +1766,70 @@ canvas {
   margin: 6px 0 0;
   font-weight: 700;
 }
+
+/* ---------- 操作の手応え（控えめなアニメーション） ----------
+ * 押した・開いた・出てきた が目で分かる程度に、0.1〜0.2秒だけ動かす。
+ * くり返し動き続けるものは置かない（授業中の集中と、カーソルが消える端末への配慮）。
+ * 「視差効果を減らす」設定の端末では、すべて止める。
+ */
+
+button {
+  transition:
+    background-color 0.12s ease-out,
+    border-color 0.12s ease-out,
+    color 0.12s ease-out,
+    transform 0.08s ease-out,
+    box-shadow 0.08s ease-out;
+}
+
+/* 押している間、少しだけ沈む（地震スタートのボタンは、もとからある沈み方のまま） */
+button:active:not(:disabled):not(.go) {
+  transform: scale(0.96);
+}
+
+/* 窓（ステージ選び・遊び方・確認など）は、ふわっと出す */
+.menu:not([hidden]) {
+  animation: fx-fade 0.16s ease-out both;
+}
+
+.menu:not([hidden]) > .menu-card {
+  animation: fx-rise 0.2s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+/* 画面の上に出る札（予想・結果・選んだ部材・再生）は、少し下から出す */
+.predict-box:not([hidden]),
+.select-box:not([hidden]),
+.result:not([hidden]),
+.replay-bar:not([hidden]) {
+  animation: fx-rise 0.18s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+@keyframes fx-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fx-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+  button:active:not(:disabled):not(.go) {
+    transform: none;
+  }
+  .menu:not([hidden]),
+  .menu:not([hidden]) > .menu-card,
+  .predict-box:not([hidden]),
+  .select-box:not([hidden]),
+  .result:not([hidden]),
+  .replay-bar:not([hidden]) {
+    animation: none;
+  }
+}
