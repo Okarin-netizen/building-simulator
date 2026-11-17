@@ -523,6 +523,29 @@ export function drawAimRing(ctx: CanvasRenderingContext2D, v: Viewport, p: { x: 
   ctx.restore();
 }
 
+/**
+ * 消したばかりの部材を、細くなりながら薄れて消えるように描く（t：0 消した瞬間 → 1 見えなくなる）。
+ * 何が消えたかが目で追えるように、ほんの一瞬だけ残す
+ */
+export function drawErased(
+  ctx: CanvasRenderingContext2D,
+  v: Viewport,
+  segments: { a: { x: number; y: number }; b: { x: number; y: number }; color: string }[],
+  t: number,
+): void {
+  if (t >= 1) return;
+  const k = 1 - t;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.globalAlpha = 0.7 * k;
+  ctx.lineWidth = memberWidth(v) * (0.4 + 0.6 * k);
+  for (const s of segments) {
+    ctx.strokeStyle = s.color;
+    strokeLine(ctx, screenOf(v, s.a), screenOf(v, s.b));
+  }
+  ctx.restore();
+}
+
 let loupeBuffer: HTMLCanvasElement | null = null;
 
 /**

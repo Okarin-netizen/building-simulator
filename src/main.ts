@@ -16,7 +16,7 @@ import { CHAPTER_NAMES, nextStage, stageById, stageFullTitle, stageLabel, STAGES
 import { $, askConfirm, closeOnBackdrop, el } from './ui/dom';
 import { setupClassPanel, type LastResult } from './ui/classPanel';
 import { setupReflectionSheet } from './ui/reflectionSheet';
-import { type BuildGuide, drawAimRing, drawDesign, drawDust, drawImpact, drawLoupe, drawRumble, drawWorld, firstBreakScreen, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
+import { type BuildGuide, drawAimRing, drawDesign, drawDust, drawErased, drawImpact, drawLoupe, drawRumble, drawWorld, firstBreakScreen, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
 import { loadSoundOn, saveSoundOn, setSoundOn, sound } from './ui/sound';
 
 const FREE_ID = 'free';
@@ -76,6 +76,8 @@ let breakFx: { at: number; label: string; color: string } | null = null;
 let collapseFx: number | null = null;
 /** 置いたばかりの部材（白く光らせる） */
 let placedFx: { indices: number[]; at: number } | null = null;
+/** 消したばかりの部材（薄れて消える） */
+let erasedFx: { segments: { a: { x: number; y: number }; b: { x: number; y: number }; color: string }[]; at: number } | null = null;
 // ---------- 詰まったときの手助け ----------
 /** ステージごとの、続けて倒れた回数（この画面を開いている間だけ数える） */
 const failStreak = new Map<string, number>();
@@ -96,6 +98,7 @@ const BREAK_FREEZE_MS = 300;
 const BREAK_FX_MS = 1000;
 const COLLAPSE_FX_MS = 900;
 const PLACED_FX_MS = 220;
+const ERASED_FX_MS = 200;
 const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
 let dragStart: { x: number; y: number } | null = null;
@@ -918,6 +921,13 @@ function deleteSelected(): void {
   if (i === null || phase !== 'build') return;
   remember();
   const hadLoad = (design.loads?.length ?? 0) > 0;
+  const gone = design.members[i];
+  erasedFx = reduceMotion()
+    ? null
+    : {
+        segments: [{ a: { ...design.nodes[gone.a] }, b: { ...design.nodes[gone.b] }, color: MATERIALS[gone.material].color }],
+        at: performance.now(),
+      };
   removeMember(design, i);
   selectMember(null);
   persist();
@@ -1196,6 +1206,7 @@ function frame(now: number): void {
     const pin = phase === 'predict' && prediction?.kind === 'member' ? prediction.index : null;
     const placed = placedFx ? { indices: placedFx.indices, t: (now - placedFx.at) / PLACED_FX_MS } : null;
     drawDesign(ctx, viewport, cssWidth, cssHeight, design, preview, hoverMember, goalHeight(), pin, phase === 'build' ? selectedMember : null, placed, phase === 'build' ? guide : {});
+    if (erasedFx) drawErased(ctx, viewport, erasedFx.segments, (now - erasedFx.at) / ERASED_FX_MS);
     if (aim) {
       // 指の下にかくれた所を、指からはなれたルーペに映す
       const focus = phase === 'build' && tool === 'place' && dragEnd ? dragEnd : aim.world;
@@ -1222,8 +1233,10 @@ let lastBuildView = '';
 function buildViewChanged(now: number): boolean {
   // 置いたばかりの部材が光っている間（0.2秒ほど）だけは、毎コマ描き直す
   if (placedFx && now - placedFx.at > PLACED_FX_MS) placedFx = null;
+  // 消した部材が薄れていく間（0.2秒ほど）も同じ。終わったら最後に一度描き直して消す
+  if (erasedFx && now - erasedFx.at > ERASED_FX_MS) erasedFx = null;
   const key = JSON.stringify([
-    placedFx ? now : null,
+    placedFx || erasedFx ? now : null,
     guide,
     phase, design, dragStart, dragEnd, hoverMember, selectedMember, prediction, aim, material, tool,
     canvas.width, canvas.height, viewMaxY, goalHeight(),
