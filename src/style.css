@@ -820,6 +820,26 @@ canvas {
   color: var(--red);
 }
 
+/* 先生用ページへのリンク（ボタンと同じ見た目にする） */
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 44px;
+  padding: 6px 14px;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  text-decoration: none;
+  transition: transform 0.08s ease-out;
+}
+
+.button-link:active {
+  transform: scale(0.96);
+}
+
 /* ---------- スロー再生 ---------- */
 
 .replay-bar {
