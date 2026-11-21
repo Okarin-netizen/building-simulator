@@ -152,7 +152,7 @@ function openStage(s: Stage | null): void {
       : `この依頼の地震：${QUAKE_LEVELS[s.quake.level].name}・${QUAKE_TYPES[s.quake.type].name}`
     : '';
   $('test-title').textContent = s?.wind ? '風の試験' : '地震';
-  startBtn.textContent = s?.wind ? '強風スタート！' : '地震スタート！';
+
   $('toggle-iso').hidden = !!s && !s.isolation;
   $('open-sheet').hidden = s?.chapter !== 'challenge';
   classPanel.refreshRankingButtons();
@@ -201,9 +201,26 @@ function openMenu(): void {
   const progress = loadProgress();
   const list = $('menu-list');
   list.innerHTML = '';
+  // 集めた星を見せて、「あと少しで全部」という目標を目の前に置く
+  const starsOf = (ids: Stage[]) => ids.reduce((n, s) => n + (progress[s.id]?.stars ?? 0), 0);
+  const starStages = STAGES.filter((x) => x.chapter !== 'challenge');
+  const got = starsOf(starStages);
+  const total = document.createElement('p');
+  total.className = 'menu-total';
+  total.innerHTML = `集めた星 <b>★ ${got}</b> / ${starStages.length * 3}${got === starStages.length * 3 ? '<span class="complete">ぜんぶ集めた！</span>' : ''}`;
+  list.appendChild(total);
   for (const chapter of ['1', '2', 'challenge', '3', '4', '5', '6']) {
     const h = document.createElement('h3');
     h.textContent = CHAPTER_NAMES[chapter];
+    const inChapter = STAGES.filter((x) => String(x.chapter) === chapter);
+    if (chapter !== 'challenge') {
+      const n = starsOf(inChapter);
+      const max = inChapter.length * 3;
+      const badge = document.createElement('span');
+      badge.className = `chapter-stars${n === max ? ' complete' : ''}`;
+      badge.textContent = n === max ? `★ ${n}/${max} コンプリート！` : `★ ${n}/${max}`;
+      h.append(badge);
+    }
     list.appendChild(h);
     const cards = document.createElement('div');
     cards.className = 'stage-cards';
@@ -322,7 +339,11 @@ $('toggle-iso').addEventListener('click', () => {
     ? `建物の下に免震ゴムを入れました（基礎1か所につき${ISOLATION_COST_PER_BASE}万円）。`
     : '免震ゴムを外しました。';
 });
-startBtn.addEventListener('click', startPredict);
+startBtn.addEventListener('click', () => (phase === 'predict' ? startQuake() : startPredict()));
+/** 試験を始めるボタンの名前（風のステージは「強風スタート！」） */
+function startLabel(): string {
+  return stage?.wind ? '強風スタート！' : '地震スタート！';
+}
 function refreshFast(): void {
   fastBtn.textContent = fast ? '早送り中（ふつうにもどす）' : '早送り ×2';
   fastBtn.classList.toggle('active', fast);
@@ -353,14 +374,23 @@ function refreshPanel(): void {
     b.disabled = running;
   });
   for (const id of ['sample-square', 'sample-braced', 'clear', 'restart', 'show-hint', 'undo']) $<HTMLButtonElement>(id).disabled = running;
-  startBtn.disabled = running || design.members.length === 0;
+  // 予想のあいだは、同じ場所のボタンが「この予想でスタート！」になる（押した所のまま、もう一度押せば始まる）
+  const predicting = phase === 'predict';
+  startBtn.disabled = predicting ? prediction === null : running || design.members.length === 0;
+  const go = startLabel();
+  startBtn.textContent = predicting ? `この予想で${go}` : go;
   const iso = $<HTMLButtonElement>('toggle-iso');
   iso.disabled = running;
   iso.classList.toggle('active', !!design.isolated);
   iso.textContent = design.isolated ? '免震ゴムを外す' : '免震ゴムを入れる';
   // 試験の前は「地震スタート！」、試験のあとは「組み立てにもどる」だけを出す
-  startBtn.hidden = running;
-  resetBtn.hidden = !running;
+  startBtn.hidden = running && !predicting;
+  resetBtn.hidden = !running || predicting;
+  // 試験中の「もどる」は、目立たない「試験をやめる」にする（いちばん大きいボタンを取り消しにしない）
+  const testing = phase === 'test';
+  resetBtn.textContent = testing ? '試験をやめる' : '組み立てにもどる';
+  resetBtn.classList.toggle('primary', !testing);
+  resetBtn.classList.toggle('quiet', testing);
   fastBtn.hidden = phase !== 'test';
   resetBtn.disabled = !running;
   // 試験中は開けないので、押せないことが見て分かるようにする
@@ -412,6 +442,8 @@ function updatePredictBox(): void {
         ? 'わたしの予想：どこもこわれない'
         : `わたしの予想：${describeMember(design, prediction.index)}`;
   predictGo.disabled = prediction === null;
+  predictGo.textContent = `この予想で${startLabel()}`;
+  refreshPanel();
   $('predict-none').classList.toggle('active', prediction?.kind === 'none');
 }
 
@@ -552,7 +584,8 @@ function showResult(w: World): void {
   html += `<div class="buttons">${canSend ? '<button type="button" data-act="send">クラスに送る</button>' : ''}${canRank ? '<button type="button" data-act="ranking">ランキングを見る</button>' : ''}<button type="button" data-act="replay">スロー再生で見る</button>`;
   // チャレンジでは、次の章（発展）へ進まず、同じタワーを改良するのを主なボタンにする
   if (isChallenge) html += `<button type="button" data-act="sheet">ふりかえりを書く</button><button type="button" class="primary" data-act="rebuild">もっと高くする</button>`;
-  else html += `<button type="button" data-act="rebuild">組み立てにもどる</button>`;
+  // クリアできなかったときは、すぐ作り直せるよう「組み立てにもどる」をいちばん目立つボタンにする
+  else html += `<button type="button"${ev.cleared ? '' : ' class="primary"'} data-act="rebuild">組み立てにもどる</button>`;
   const next = stage && ev.cleared && !isChallenge ? nextStage(stage.id) : undefined;
   if (next) html += `<button type="button" class="primary" data-act="next">次のステージへ</button>`;
   if (stage && ev.cleared && !next && !isChallenge) html += `<button type="button" class="primary" data-act="menu">ステージ一覧へ</button>`;
@@ -562,6 +595,7 @@ function showResult(w: World): void {
   resultBox.className = `result reveal ${ev.cleared ? 'ok' : 'fail'}`;
   if (stage && ev.stars === 3) resultBox.append(confetti());
   resultBox.hidden = false;
+  resultShownAt = performance.now();
   if (stage) for (let i = 0; i < ev.stars; i++) setTimeout(() => sound.star(i), STAR_DELAY_MS * (i + 1));
   placeResultBox(w);
   resultBox.querySelector('[data-act=replay]')?.addEventListener('click', startReplay);
@@ -955,6 +989,35 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+/**
+ * キーボードで進める（Chromebook 向け）。Enter・スペースで、いまの場面のいちばん大事なボタンを押す。
+ * Ctrl+Z（Mac は ⌘+Z）で1つ戻す。ボタンや入力欄にいるときは、そのボタン・欄のふつうの動きにまかせる
+ */
+window.addEventListener('keydown', (e) => {
+  if (e.defaultPrevented || e.altKey) return;
+  const target = e.target as HTMLElement | null;
+  if (target?.closest('input, textarea, select, button, a, summary, [contenteditable]')) return;
+  if (document.querySelector('.menu:not([hidden])')) return;
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+    if (phase !== 'build') return;
+    e.preventDefault();
+    undo();
+    return;
+  }
+  if (e.ctrlKey || e.metaKey || (e.key !== 'Enter' && e.key !== ' ')) return;
+  e.preventDefault();
+  // 押しっぱなしの連続入力や、結果が出た直後の押しまちがいで、結果を読みとばさないようにする
+  if (e.repeat || performance.now() - resultShownAt < RESULT_KEY_GUARD_MS) return;
+  if (phase === 'build' || phase === 'predict') {
+    if (!startBtn.disabled) startBtn.click();
+  } else if (phase === 'result') {
+    (resultBox.querySelector<HTMLButtonElement>('button.primary') ?? resetBtn).click();
+  }
+});
+/** 結果が出てから、Enter・スペースを受けつけるまでの時間（ミリ秒） */
+const RESULT_KEY_GUARD_MS = 800;
+let resultShownAt = -Infinity;
+
 /** 押し始めた所（画面の位置と、方眼の位置）。タップ（ほとんど動かさずにはなす）かどうかを見分ける */
 let pressAt: { sx: number; sy: number; world: { x: number; y: number } } | null = null;
 /** これより動かさずにはなしたら「タップ」（画面の px） */
@@ -1030,7 +1093,7 @@ canvas.addEventListener('pointerup', (e) => {
       const over = stage && designCost(design) > stage.budget;
       hint.textContent = over
         ? '予算オーバーです。部材を減らすか、安い材料にしよう。'
-        : `部材を置きました。続けて置くか、「${startBtn.textContent}」で試験しよう。`;
+        : `部材を置きました。続けて置くか、「${startLabel()}」で試験しよう。`;
     } else if (dragStart.x !== dragEnd.x || dragStart.y !== dragEnd.y) {
       hint.textContent = `部材の長さは ${MAX_MEMBER_LENGTH} m までです。`;
     }
@@ -1151,7 +1214,7 @@ function frame(now: number): void {
     // こわれた瞬間は少しだけ止めて、どこがこわれたかを見せる（計算は止めるだけなので結果は変わらない）
     if (now < freezeUntil) simLag = 0;
     else simLag += dt * (slowCheck.checked ? 0.25 : 1) * (fast ? 2 : 1);
-    const quakeEnd = SETTLE_TIME + (world.quake?.duration ?? world.wind?.duration ?? 0) + 2;
+    const quakeEnd = testEndTime(world);
     while (simLag >= SIM_STEP && phase === 'test') {
       simLag -= SIM_STEP;
       const hadBreak = !!world.firstBreak;
@@ -1169,6 +1232,7 @@ function frame(now: number): void {
       }
     }
   }
+  updateTestTimer();
   if (world && phase === 'replay') {
     if (replayPlaying) {
       replayTime += dt * Number(replaySpeed.value);
@@ -1274,6 +1338,34 @@ function drawTestFx(w: World, now: number): void {
     }
   }
   if (collapseFx !== null) drawDust(ctx, viewport, w.nodes.filter((n) => n.support).map((n) => n.x), (now - collapseFx) / COLLAPSE_FX_MS);
+}
+
+/** 試験が終わる時刻（揺れ・風が止んでから2秒、建物がおさまるのを待つ） */
+function testEndTime(w: World): number {
+  return SETTLE_TIME + (w.quake?.duration ?? w.wind?.duration ?? 0) + 2;
+}
+
+const testTimer = $<HTMLDivElement>('test-timer');
+const testTimerFill = $<HTMLSpanElement>('test-timer-fill');
+const testTimerText = $<HTMLSpanElement>('test-timer-text');
+/** 前に書いた残り時間の表示。変わったときだけ書きかえる */
+let lastTimerKey = '';
+
+/** 試験中に「のこり○秒」とゲージを出す（待つ長さが分かると、待つのが苦にならない） */
+function updateTestTimer(): void {
+  const show = phase === 'test' && !!world;
+  if (testTimer.hidden !== !show) testTimer.hidden = !show;
+  if (!show || !world) return;
+  const end = testEndTime(world);
+  const left = Math.max(0, end - world.time);
+  const shaking = world.time < end - 2;
+  const text = shaking ? `${world.wind ? '風' : '揺れ'} のこり ${Math.ceil(left - 2)}秒` : 'おさまるのを待っています';
+  const ratio = Math.min(1, world.time / end);
+  const key = `${text}|${Math.round(ratio * 200)}`;
+  if (key === lastTimerKey) return;
+  lastTimerKey = key;
+  testTimerText.textContent = text;
+  testTimerFill.style.transform = `scaleX(${ratio})`;
 }
 
 function currentShift(w: World): number {

@@ -409,6 +409,52 @@ canvas {
   display: none;
 }
 
+/* 試験中の「試験をやめる」は小さく、目立たせない */
+.panel-go button.back.quiet {
+  min-height: 40px;
+  font-size: 15px;
+  background: var(--panel);
+}
+
+/* 試験中の「のこり○秒」 */
+.test-timer {
+  position: absolute;
+  top: 16px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.test-timer[hidden] {
+  display: none;
+}
+
+.test-timer-bar {
+  position: relative;
+  width: 120px;
+  height: 10px;
+  overflow: hidden;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--bg);
+}
+
+.test-timer-bar span {
+  position: absolute;
+  inset: 0;
+  background: var(--yellow);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
 /* 試験中の早送り（待ち時間を半分にする） */
 .panel-go button.fast {
   flex: 1 1 100%;
@@ -929,6 +975,39 @@ canvas {
 .menu-card h3 {
   font-size: 15px;
   margin: 14px 0 6px;
+}
+
+/* 集めた星（ステージ一覧のいちばん上と、章ごと） */
+.menu-total {
+  margin: 0 0 4px;
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.menu-total b {
+  font-size: 20px;
+  color: var(--star);
+  -webkit-text-stroke: 0.5px var(--ink);
+}
+
+.menu-total .complete,
+.chapter-stars.complete {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--yellow);
+  border: 2px solid var(--ink);
+  font-size: 13px;
+}
+
+.chapter-stars {
+  margin-left: 8px;
+  font-size: 13px;
+  color: var(--quiet);
+}
+
+.chapter-stars.complete {
+  color: var(--ink);
 }
 
 .stage-cards {
@@ -1454,6 +1533,17 @@ canvas {
   }
   .legend-box p {
     display: none;
+  }
+  /* 上の説明と重ならないよう、のこり時間は色の見方のすぐ上に出す */
+  .test-timer {
+    top: auto;
+    right: 8px;
+    bottom: 50px;
+    padding: 3px 10px;
+    font-size: 13px;
+  }
+  .test-timer-bar {
+    width: 64px;
   }
   .select-box {
     left: 8px;

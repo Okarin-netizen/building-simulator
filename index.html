@@ -110,6 +110,10 @@
           <div class="scale"><span>余裕</span><span class="bar"></span><span>こわれそう</span></div>
           <p>丸はつなぎ目。赤い丸は曲がりすぎて危ない所、×はこわれた所。</p>
         </div>
+        <div class="test-timer" id="test-timer" aria-hidden="true" hidden>
+          <span class="test-timer-bar"><span id="test-timer-fill"></span></span>
+          <span id="test-timer-text"></span>
+        </div>
         <canvas id="canvas"></canvas>
         <div class="select-box" id="select-box" hidden>
           <p class="select-title" id="select-title"></p>
@@ -182,6 +186,7 @@
           <dt>基礎（きそ）</dt><dd>地面とのつなぎ目</dd>
           <dt>揺れ幅（ゆれはば）</dt><dd>いちばん上が、地面にくらべて横にずれた大きさ</dd>
         </dl>
+        <p class="howto-note">キーボードでは、<b>Enter</b>（またはスペース）で「地震スタート！」などのいちばん大きなボタンを押せます。<b>Ctrl+Z</b> で1つ戻せます。</p>
         <p class="howto-note">値段・強さ・重さの数字は、本物の大小関係に合わせたゲーム用の値です。本物の建物の数字ではありません。</p>
         <div class="buttons sheet-actions">
           <button type="button" id="howto-close" class="primary">はじめる</button>
