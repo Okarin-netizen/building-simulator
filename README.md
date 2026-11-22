@@ -47,6 +47,8 @@
 
 ## 開発
 
+Node.js 22.12 以上が必要（Vite 8・Vitest 5・TypeScript 7 を使用）。
+
 ```bash
 npm install
 npm run dev     # 開発用サーバー

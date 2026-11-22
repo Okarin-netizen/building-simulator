@@ -1,21 +1,29 @@
 // 画面の操作：ステージを選ぶ、部材を置く・選んで直す、地震で試験する、結果を見る。
+//
+// このファイルの並び（「// ---------- 」で区切ってある）
+//   状態 → ステージの切り替え → ステージ一覧 → パネル → 予想 → 地震の試験（結果カード）
+//   → スロー再生 → ふりかえり・ランキング → 遊び方 → 入力（キー・指・マウス）→ 描画ループ
+// ほかのファイル
+//   physics/ 物理の計算（授業の前提なので、数値を変えるときはテストと指導案も確かめる）
+//   game/    ステージ・採点・予想・記録の保存など、画面を持たない決まりごと（テストあり）
+//   render.ts キャンバスに描く / ui/ 窓や結果カードなどの画面の部品
 
 import { addMember, designCost, designHeight, emptyDesign, frameDesign, ISOLATION_COST_PER_BASE, removeMember, setMemberMaterial, type Design } from './physics/design';
 import { MATERIALS, MATERIAL_IDS, type MaterialId } from './physics/materials';
 import { groundOffset, makeQuake, QUAKE_LEVELS, QUAKE_TYPES, TEST_DURATION, type QuakeLevel, type QuakeType } from './physics/quake';
-import { createWorld, SETTLE_TIME, step, type World } from './physics/world';
+import { brokenCount, createWorld, SETTLE_TIME, step, type World } from './physics/world';
 import { distanceToSegment } from './physics/geometry';
 import { canStartTest, evaluate, safetyNote } from './game/evaluate';
 import { breakAdvice, breakFloor, judgePrediction, describeMember, type Prediction } from './game/predict';
-import { brokenCount } from './physics/world';
 import { compareTries } from './game/compare';
 import { applyFrame, captureFrame, frameIndexAt, type Frame } from './game/replay';
 import { loadDesign, loadLastStage, loadLastTry, loadProgress, logAttempt, recordResult, saveDesign, saveLastStage, saveLastTry, clearAllRecords } from './game/progress';
-import { APP_LICENSE, AUTHOR, CHANGELOG, MIT_TEXT, THIRD_PARTY } from './game/about';
 import { CHAPTER_NAMES, nextStage, stageById, stageFullTitle, stageLabel, STAGES, type Stage } from './game/stages';
-import { $, askConfirm, closeOnBackdrop, el } from './ui/dom';
+import { $, askConfirm, closeOnBackdrop, escapeHtml, starsHtml } from './ui/dom';
 import { setupClassPanel, type LastResult } from './ui/classPanel';
 import { setupReflectionSheet } from './ui/reflectionSheet';
+import { setupAboutDialog } from './ui/aboutDialog';
+import { confetti, placeResultBox, resultTitle, resultWord } from './ui/resultCard';
 import { type BuildGuide, drawAimRing, drawDesign, drawDust, drawErased, drawImpact, drawLoupe, drawRumble, drawWorld, firstBreakScreen, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
 import { loadSoundOn, saveSoundOn, setSoundOn, sound } from './ui/sound';
 
@@ -107,11 +115,11 @@ let hoverMember: number | null = null;
 /** タップで選んだ部材（材料を変える・消す）。設計図の形が変わったら選びなおし */
 let selectedMember: number | null = null;
 
+/** 画面をおおう窓（ステージ一覧・遊び方・確認など）が開いているか */
+const isDialogOpen = () => document.querySelector('.menu:not([hidden])') !== null;
 const designId = () => stage?.id ?? FREE_ID;
 const goalHeight = () => stage?.goalHeight ?? 0;
 const allowedMaterials = () => stage?.materials ?? MATERIAL_IDS;
-const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
-const starText = (n: number) => '★'.repeat(n) + `<span class="off">${'★'.repeat(3 - n)}</span>`;
 
 // ---------- ステージの切り替え ----------
 
@@ -187,6 +195,8 @@ function undo(): void {
   selectMember(null);
   persist();
   refreshPanel();
+  // 消した上の階を戻したときに、画面の上で切れないよう映す高さを合わせ直す
+  fitView();
   hint.textContent = '1つ前に戻しました。';
 }
 
@@ -234,7 +244,7 @@ function openMenu(): void {
           ? rec?.bestHeight
             ? `記録 ${rec.bestHeight} m`
             : 'まだ記録なし'
-          : `<span class="card-stars">${starText(rec?.stars ?? 0)}</span>`;
+          : `<span class="card-stars">${starsHtml(rec?.stars ?? 0)}</span>`;
       b.innerHTML = `<span class="no">${stageLabel(s)}</span><br>${escapeHtml(s.title)}<br>${sub}`;
       b.addEventListener('click', () => openStage(s));
       cards.appendChild(b);
@@ -268,11 +278,10 @@ function buildMaterialButtons(): void {
     b.type = 'button';
     b.dataset.material = id;
     const t = m.traits;
-    const dots = (n: number) => '★'.repeat(n) + `<span class="off">${'★'.repeat(3 - n)}</span>`;
     const traits =
       'note' in t
         ? `<span class="traits">${escapeHtml(t.note)}</span>`
-        : `<span class="traits">強さ${dots(t.strength)} 重さ${dots(t.weight)} ねばり${dots(t.toughness)}</span>`;
+        : `<span class="traits">強さ${starsHtml(t.strength)} 重さ${starsHtml(t.weight)} ねばり${starsHtml(t.toughness)}</span>`;
     const merit = m.merit ? `<span class="merit">${escapeHtml(m.merit)}</span>` : '';
     b.innerHTML = `<span class="mat-top"><span class="swatch" style="background:${m.color}"></span>${m.name}<span class="price">${m.costPerMeter}万円/m</span></span>${traits}${merit}`;
     b.addEventListener('click', () => {
@@ -304,6 +313,7 @@ function setDesign(d: Design): void {
   selectMember(null);
   persist();
   refreshPanel();
+  fitView();
 }
 
 $('sample-square').addEventListener('click', () => setDesign(frameDesign({ floors: 3, material })));
@@ -426,6 +436,8 @@ function startPredict(): void {
     return;
   }
   selectMember(null);
+  // マウスを押したまま Enter を押したとき、予想の画面で部材が置かれてしまわないよう、置きかけを捨てる
+  endPress();
   phase = 'predict';
   prediction = null;
   updatePredictBox();
@@ -535,21 +547,11 @@ function showResult(w: World): void {
         height: ev.cleared ? ev.height : 0,
         stars: ev.stars,
         cost,
-        result: ev.cleared ? 'クリア' : ev.fell === 'collapsed' ? '倒れた' : ev.fell === 'partly' ? '一部がくずれた' : '高さが足りない',
+        result: resultWord(ev),
       }
     : null;
 
-  const title = ev.cleared
-    ? isChallenge
-      ? `記録 ${ev.height} m！`
-      : stage
-        ? 'クリア！'
-        : '耐えた！'
-    : ev.fell === 'collapsed'
-      ? '倒れてしまった…'
-      : ev.fell === 'partly'
-        ? '一部がくずれた…'
-        : `高さが足りません（目標 ${goalHeight()} m）`;
+  const title = resultTitle(ev, isChallenge ? 'challenge' : stage ? 'stage' : 'free', goalHeight());
 
   // 3つの項目を上から順に出し、合格した項目ごとに星を1つずつ光らせる（ほめる演出）
   const starSpans = [0, 1, 2].map((i) => `<span class="star ${i < ev.stars ? 'on' : 'off'}" style="--i:${i}">★</span>`).join('');
@@ -597,7 +599,7 @@ function showResult(w: World): void {
   resultBox.hidden = false;
   resultShownAt = performance.now();
   if (stage) for (let i = 0; i < ev.stars; i++) setTimeout(() => sound.star(i), STAR_DELAY_MS * (i + 1));
-  placeResultBox(w);
+  placeResultBox(resultBox, w.nodes.map((n) => toScreen(viewport, n.x, n.y).sx), cssWidth);
   resultBox.querySelector('[data-act=replay]')?.addEventListener('click', startReplay);
   resultBox.querySelector('[data-act=send]')?.addEventListener('click', classPanel.openSend);
   resultBox.querySelector('[data-act=ranking]')?.addEventListener('click', () => classPanel.openRanking());
@@ -635,40 +637,6 @@ function helpGuide(w: World, fails: number): BuildGuide {
 
 /** 星が1つ光るまでの間（ミリ秒）。CSS の --star-delay と同じ */
 const STAR_DELAY_MS = 200;
-
-/** 星3つのときの紙ふぶき（工事現場の黄色と黒）。すぐ消える */
-function confetti(): HTMLElement {
-  const box = el('div', undefined, 'confetti');
-  box.setAttribute('aria-hidden', 'true');
-  for (let i = 0; i < 18; i++) {
-    const piece = el('span');
-    piece.style.left = `${5 + ((i * 53) % 90)}%`;
-    piece.style.animationDelay = `${0.6 + (i % 6) * 0.06}s`;
-    piece.style.background = i % 3 === 0 ? '#1f1f1f' : '#f6c343';
-    piece.style.setProperty('--turn', `${(i % 2 ? 1 : -1) * (180 + i * 20)}deg`);
-    box.append(piece);
-  }
-  setTimeout(() => box.remove(), 2600);
-  return box;
-}
-
-/** 結果カードを、建物に重ならない側（右か左）に置く。どちらにも入らなければ、すき間の広い側 */
-function placeResultBox(w: World): void {
-  resultBox.classList.remove('left');
-  resultBox.style.width = '';
-  const xs = w.nodes.map((n) => toScreen(viewport, n.x, n.y).sx);
-  if (xs.length === 0) return;
-  const gap = 24;
-  const need = resultBox.offsetWidth + gap * 2;
-  const roomRight = cssWidth - Math.max(...xs);
-  const roomLeft = Math.min(...xs);
-  const left = roomRight < need && (roomLeft >= need || roomLeft > roomRight);
-  resultBox.classList.toggle('left', left);
-  // どちらにも入らないときは、すき間の広い側に合わせてカードを細くする（細くしすぎない）
-  const room = (left ? roomLeft : roomRight) - gap * 2;
-  if (room < resultBox.offsetWidth) resultBox.style.width = `${Math.max(MIN_RESULT_WIDTH, room)}px`;
-}
-const MIN_RESULT_WIDTH = 300;
 
 // ---------- スロー再生 ----------
 
@@ -762,44 +730,7 @@ const classPanel = setupClassPanel({
   setHint: (text) => (hint.textContent = text),
 });
 
-// ---------- このアプリについて（作者・更新履歴・ライセンス） ----------
-
-const aboutDialog = $<HTMLDivElement>('about-dialog');
-
-function buildAbout(): void {
-  $('about-version').textContent = `ver.${CHANGELOG[0].version}`;
-  $('about-author').textContent = AUTHOR;
-
-  const log = $('about-changelog');
-  for (const c of CHANGELOG) {
-    const box = el('div', undefined, 'change');
-    const head = el('p', undefined, 'change-head');
-    head.append(el('span', `ver.${c.version}`, 'change-ver'), ` ${c.title}`, el('small', `　${c.date}`));
-    const ul = el('ul');
-    for (const it of c.items) ul.append(el('li', it));
-    box.append(head, ul);
-    log.append(box);
-  }
-
-  $('about-license').textContent = `このアプリは${APP_LICENSE.name}です。${APP_LICENSE.summary}`;
-  $('about-license-text').textContent = `MIT License\n\n${APP_LICENSE.copyright}\n\n${MIT_TEXT}`;
-
-  const libs = $('about-libs');
-  for (const t of THIRD_PARTY) {
-    const li = el('li');
-    const a = el('a', t.name);
-    a.href = t.url;
-    a.target = '_blank';
-    a.rel = 'noopener';
-    li.append(a, `：${t.use}　`, el('span', t.license, 'lib-license'));
-    libs.append(li);
-  }
-}
-buildAbout();
-
-$('open-about').addEventListener('click', () => (aboutDialog.hidden = false));
-$('about-close').addEventListener('click', () => (aboutDialog.hidden = true));
-closeOnBackdrop(aboutDialog);
+setupAboutDialog();
 
 // ---------- 遊び方 ----------
 
@@ -981,6 +912,8 @@ $('select-close').addEventListener('click', () => {
 window.addEventListener('keydown', (e) => {
   if (phase !== 'build' || selectedMember === null) return;
   if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
+  // 遊び方・このアプリについてなどの窓が開いている間は、後ろの部材を消さない
+  if (isDialogOpen()) return;
   if (e.key === 'Delete' || e.key === 'Backspace') {
     e.preventDefault();
     deleteSelected();
@@ -995,16 +928,24 @@ window.addEventListener('keydown', (e) => {
  */
 window.addEventListener('keydown', (e) => {
   if (e.defaultPrevented || e.altKey) return;
-  const target = e.target as HTMLElement | null;
-  if (target?.closest('input, textarea, select, button, a, summary, [contenteditable]')) return;
-  if (document.querySelector('.menu:not([hidden])')) return;
+  let target = e.target as HTMLElement | null;
+  // 閉じた窓のボタンにフォーカスが残っていると、キーが効かなくなる。見えない所のフォーカスは外す
+  if (target && target !== document.body && target.getClientRects().length === 0) {
+    target.blur();
+    target = null;
+  }
+  if (target?.closest('input, textarea, select, [contenteditable]')) return;
+  if (isDialogOpen()) return;
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') {
+    // ボタンを押したあとでも Ctrl+Z は効くようにする（ボタンは Ctrl+Z を使わない）
     if (phase !== 'build') return;
     e.preventDefault();
     undo();
     return;
   }
   if (e.ctrlKey || e.metaKey || (e.key !== 'Enter' && e.key !== ' ')) return;
+  // ボタン・リンクにいるときの Enter・スペースは、そのボタン・リンクを押す（ふつうの動き）
+  if (target?.closest('button, a, summary')) return;
   e.preventDefault();
   // 押しっぱなしの連続入力や、結果が出た直後の押しまちがいで、結果を読みとばさないようにする
   if (e.repeat || performance.now() - resultShownAt < RESULT_KEY_GUARD_MS) return;
@@ -1036,6 +977,8 @@ canvas.addEventListener('pointerdown', (e) => {
   // 2本目の指（ピンチなど）は無視する
   if (!e.isPrimary) return;
   if (phase !== 'build' && phase !== 'predict') return;
+  // 建物を触ったら、前に押したボタンからフォーカスを外す（そのあとの Enter で、そのボタンがまた押されないように）
+  if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) document.activeElement.blur();
   canvas.setPointerCapture(e.pointerId);
   pressing = true;
   pressTouch = e.pointerType !== 'mouse';
@@ -1226,7 +1169,7 @@ function frame(now: number): void {
         sound.collapse();
       }
       if (world.time > quakeEnd || (world.collapsed && world.time > (world.collapseTime ?? 0) + 1.5)) showResult(world);
-      if (!hadBreak && world.firstBreak) {
+      if (phase === 'test' && !hadBreak && world.firstBreak) {
         onFirstBreak(world, now);
         break;
       }
