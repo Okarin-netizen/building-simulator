@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 
 // GitHub Pages ではリポジトリ名のパスで公開されるため base を相対にする
 export default defineConfig({
@@ -6,4 +6,4 @@ export default defineConfig({
   test: {
     globals: true,
   },
-} as any);
+});

@@ -19,6 +19,19 @@ export interface ChangeEntry {
 /** 新しいものを上に書く */
 export const CHANGELOG: ChangeEntry[] = [
   {
+    version: '0.34',
+    date: '2026-11-22',
+    title: '細かい不具合を直し、作る道具を新しくした',
+    items: [
+      '部材を消したあと「1つ戻す」で上の階を戻すと、建物の上が画面から切れることがあったのを直した',
+      '「遊び方」などの窓を開いているときに Delete・Backspace を押すと、後ろで選んでいた部材が消えてしまうのを直した',
+      'マウスでドラッグしている途中に Enter を押すと、予想の画面で部材が置かれてしまうことがあったのを直した',
+      '窓を閉じたあとや、ボタンを押してから建物を触ったあとに、Enter・Ctrl+Z が効かないことがあったのを直した',
+      '試験の最後の瞬間にこわれたとき、結果が出たあとに「バキッ」が鳴ることがあったのを直した',
+      '公開用ファイルを作る道具（Vite・Vitest・TypeScript）を最新版にした。物理の計算と授業の流れは変わらない',
+    ],
+  },
+  {
     version: '0.33',
     date: '2026-11-22',
     title: '押す場所をそろえ、待ち時間と目標を見えるようにした',
@@ -410,7 +423,7 @@ export const THIRD_PARTY: ThirdParty[] = [
     name: 'Vite',
     use: '公開用ファイルを作る道具（作るときだけ使用）',
     license: 'MIT License',
-    url: 'https://vitejs.dev/',
+    url: 'https://vite.dev/',
   },
   {
     name: 'Vitest',

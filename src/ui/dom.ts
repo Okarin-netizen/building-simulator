@@ -81,3 +81,9 @@ export function askConfirm(message: string, okLabel = 'はい'): Promise<boolean
     ok.focus();
   });
 }
+
+/** innerHTML に文字を入れるときに、記号をそのまま表示されるように直す */
+export const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+/** 星の数（0〜3）を、光る星と灰色の星で表す HTML */
+export const starsHtml = (n: number) => '★'.repeat(n) + `<span class="off">${'★'.repeat(3 - n)}</span>`;
