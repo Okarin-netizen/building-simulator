@@ -23,6 +23,7 @@ import { $, askConfirm, closeOnBackdrop, escapeHtml, starsHtml } from './ui/dom'
 import { setupClassPanel, type LastResult } from './ui/classPanel';
 import { setupReflectionSheet } from './ui/reflectionSheet';
 import { setupAboutDialog } from './ui/aboutDialog';
+import { setupTitleScreen, titleSummary } from './ui/titleScreen';
 import { confetti, placeResultBox, resultTitle, resultWord } from './ui/resultCard';
 import { type BuildGuide, drawAimRing, drawDesign, drawDust, drawErased, drawImpact, drawLoupe, drawRumble, drawWorld, firstBreakScreen, makeViewport, MAX_MEMBER_LENGTH, toScreen, toWorld, VIEW, viewHeightFor, type Viewport } from './render';
 import { loadSoundOn, saveSoundOn, setSoundOn, sound } from './ui/sound';
@@ -1323,5 +1324,11 @@ const lastId = loadLastStage();
 firstVisit = !lastId;
 if (lastId === FREE_ID) openStage(null);
 else openStage(stageById(lastId ?? '') ?? STAGES[0]);
+// まずタイトル画面。後ろではもう、はじめて＝1-1、2回目から＝前のステージが開いているので、ボタン1つで遊べる
+setupTitleScreen({
+  onStart: () => {},
+  onStageSelect: openMenu,
+  onHowto: () => openHowto(),
+}).show(titleSummary(loadProgress(), firstVisit, stage));
 firstVisit = false;
 requestAnimationFrame(frame);
