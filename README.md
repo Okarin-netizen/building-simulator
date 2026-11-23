@@ -96,3 +96,7 @@ npm run build   # dist/ に公開用ファイルを作る
 - ライセンス：MIT（[LICENSE](./LICENSE)）
 - フォント Dela Gothic One・Zen Kaku Gothic New は SIL Open Font License 1.1（Google Fonts から読みこみ）
 - 更新履歴とライセンスは、アプリ右上の「このアプリについて」でも見られます（`src/game/about.ts`。新しい版を出したら `CHANGELOG` の先頭に足し、`package.json` の version もそろえる）
+
+## 要求の一覧
+
+この制作物の目的・要求・受入条件・データの扱いは [docs/requirements.md](docs/requirements.md) にまとめています。直す前や、点検で指摘を受けたときは、まずここを更新します。
