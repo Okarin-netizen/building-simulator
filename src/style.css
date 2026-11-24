@@ -57,6 +57,20 @@ body {
   color: var(--yellow);
 }
 
+/* ロゴを押すとタイトルに戻る（見た目はロゴのまま） */
+.top h1 .logo-btn {
+  all: unset;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  border-radius: 6px;
+}
+
+.top h1 .logo-btn:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 3px;
+}
+
 .stage-no {
   padding: 3px 10px;
   border-radius: 4px;
@@ -2064,6 +2078,7 @@ button.go.title-start:active {
 
 .title-sub button {
   flex: 1;
+  white-space: nowrap;
   background: transparent;
   border-color: #fff;
   color: #fff;
@@ -2152,4 +2167,19 @@ button.go.title-start:active {
   .title-foot {
     margin-top: 8px;
   }
+}
+
+/* ステージ一覧の上の「タイトルに戻る」（見出しの横に小さく） */
+.menu-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.menu-head button {
+  min-height: 40px;
+  padding: 6px 14px;
+  font-size: 14px;
 }

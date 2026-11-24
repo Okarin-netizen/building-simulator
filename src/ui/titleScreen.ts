@@ -1,4 +1,4 @@
-// タイトル画面。開いたらまず出して、大きなボタン1つ（または Enter・スペース）で遊びはじめる。
+// タイトル画面。開いたらまず出して（ゲーム中もロゴや「タイトルに戻る」で戻れる）、大きなボタン1つ（または Enter・スペース）で遊びはじめる。
 // 後ろではもう、はじめて＝1-1、2回目から＝前に開いたステージ が開いている。
 
 import type { Progress } from '../game/progress';
@@ -9,6 +9,8 @@ import { $ } from './dom';
 export interface TitleSummary {
   /** いちばん大きなボタンの文字 */
   primary: string;
+  /** 「はじめから」（1-1 から）を出すか。はじめての人には出さない */
+  restart: boolean;
   /** ボタンの下に出す、どこから始まるか */
   where: string;
   /** 集めた星（チャレンジはのぞく） */
@@ -22,6 +24,7 @@ export function titleSummary(progress: Progress, first: boolean, stage: Stage | 
   const stars = starStages.reduce((n, s) => n + Math.min(3, Math.max(0, progress[s.id]?.stars ?? 0)), 0);
   return {
     primary: first ? 'はじめる' : 'つづきから',
+    restart: !first,
     where: stage ? stageFullTitle(stage) : '自由に作る（実験モード）',
     stars,
     maxStars: starStages.length * 3,
@@ -30,6 +33,8 @@ export function titleSummary(progress: Progress, first: boolean, stage: Stage | 
 
 export function setupTitleScreen(opts: {
   onStart: () => void;
+  /** 「はじめから」：記録は残したまま、1-1 を最初の形から */
+  onRestart: () => void;
   onStageSelect: () => void;
   onHowto: () => void;
 }): { show: (s: TitleSummary) => void; isOpen: () => boolean } {
@@ -41,6 +46,10 @@ export function setupTitleScreen(opts: {
   $('title-start').addEventListener('click', () => {
     hide();
     opts.onStart();
+  });
+  $('title-restart').addEventListener('click', () => {
+    hide();
+    opts.onRestart();
   });
   $('title-stages').addEventListener('click', () => {
     hide();
@@ -62,6 +71,7 @@ export function setupTitleScreen(opts: {
     show(s) {
       $('title-start').textContent = s.primary;
       $('title-where').textContent = s.where;
+      $('title-restart').hidden = !s.restart;
       $('title-stars').innerHTML = `集めた星 <b>★ ${s.stars}</b> / ${s.maxStars}`;
       box.hidden = false;
     },
