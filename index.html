@@ -15,7 +15,7 @@
   <body>
     <header class="top">
       <div class="top-row">
-        <h1>最高タワー工房</h1>
+        <h1><button type="button" class="logo-btn" id="to-title" title="タイトルに戻る">最高タワー工房</button></h1>
         <span class="stage-no" id="stage-no"></span>
         <span class="stage-name" id="stage-name"></span>
         <div class="top-actions">
@@ -192,6 +192,7 @@
           <button type="button" id="title-start" class="go title-start">はじめる</button>
           <p class="title-where" id="title-where"></p>
           <div class="buttons title-sub">
+            <button type="button" id="title-restart" hidden>はじめから</button>
             <button type="button" id="title-stages">ステージを選ぶ</button>
             <button type="button" id="title-howto">遊び方</button>
           </div>
@@ -206,7 +207,10 @@
 
     <div class="menu" id="menu" hidden>
       <div class="menu-card">
-        <h2>ステージを選ぼう</h2>
+        <div class="menu-head">
+          <h2>ステージを選ぼう</h2>
+          <button type="button" id="menu-title">タイトルに戻る</button>
+        </div>
         <div id="menu-list"></div>
         <div class="menu-free">
           <button type="button" id="free-mode">自由に作る（実験モード）</button>

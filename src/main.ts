@@ -124,11 +124,13 @@ const allowedMaterials = () => stage?.materials ?? MATERIAL_IDS;
 
 // ---------- ステージの切り替え ----------
 
-function openStage(s: Stage | null): void {
+/** fresh なら作りかけを使わず、ステージの最初の形から（タイトルの「はじめから」） */
+function openStage(s: Stage | null, fresh = false): void {
   resetTest();
   selectMember(null);
   stage = s;
-  design = loadDesign(designId()) ?? (s ? s.initial() : frameDesign({ floors: 3 }));
+  design = (fresh ? null : loadDesign(designId())) ?? (s ? s.initial() : frameDesign({ floors: 3 }));
+  if (fresh) saveDesign(designId(), design);
   undoStack = [];
   fitView();
   if (!allowedMaterials().includes(material)) material = allowedMaterials()[0];
@@ -147,7 +149,7 @@ function openStage(s: Stage | null): void {
   guide = {};
   pendingHelp = { advice: null, guide: {} };
   hint.textContent =
-    firstVisit && s?.id === '1-1'
+    (firstVisit || fresh) && s?.id === '1-1'
       ? 'まずはこのまま「地震スタート！」を押して、この建物がどうなるか見てみよう。'
       : '点から点へドラッグして部材を置こう。置いた部材はタップすると、材料を変えたり消したりできます。';
   $('stage-tools').hidden = !s;
@@ -1325,10 +1327,23 @@ firstVisit = !lastId;
 if (lastId === FREE_ID) openStage(null);
 else openStage(stageById(lastId ?? '') ?? STAGES[0]);
 // まずタイトル画面。後ろではもう、はじめて＝1-1、2回目から＝前のステージが開いているので、ボタン1つで遊べる
-setupTitleScreen({
+const titleScreen = setupTitleScreen({
   onStart: () => {},
+  // 記録（星など）は残したまま、1-1 を最初の形から
+  onRestart: () => openStage(STAGES[0], true),
   onStageSelect: openMenu,
   onHowto: () => openHowto(),
-}).show(titleSummary(loadProgress(), firstVisit, stage));
+});
+titleScreen.show(titleSummary(loadProgress(), firstVisit, stage));
 firstVisit = false;
+
+/** ゲーム中からタイトルに戻る（試験中はもどれない。今のステージは開いたまま） */
+function backToTitle(): void {
+  if (phase === 'test') return;
+  selectMember(null);
+  menu.hidden = true;
+  titleScreen.show(titleSummary(loadProgress(), false, stage));
+}
+$('to-title').addEventListener('click', backToTitle);
+$('menu-title').addEventListener('click', backToTitle);
 requestAnimationFrame(frame);
